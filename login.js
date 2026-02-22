@@ -8,7 +8,12 @@ const DEFAULT_NEXT_PATH = "/profile.html";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const providerButtons = Array.from(document.querySelectorAll("[data-provider]"));
+const googleLoginButton = document.getElementById("google-login-btn");
+const loginNote = document.getElementById("login-note");
 const loginError = document.getElementById("login-error");
+if (!loginError) {
+    console.warn('No #login-error element found in DOM.');
+}
 
 function setStoredToken(session) {
     if (session?.access_token) {
@@ -48,6 +53,34 @@ function redirectToNext() {
     window.location.replace(nextPath);
 }
 
+function buildGoogleAuthorizeUrl() {
+    const loginReturnUrl = new URL(window.location.href);
+    loginReturnUrl.searchParams.set("next", nextPath);
+
+    const authorizeUrl = new URL(`${SUPABASE_URL}/auth/v1/authorize`);
+    authorizeUrl.searchParams.set("provider", "google");
+    authorizeUrl.searchParams.set("redirect_to", loginReturnUrl.toString());
+    return authorizeUrl.toString();
+}
+
+function startGoogleAuth() {
+    if (loginError) loginError.textContent = "";
+
+    if (window.location.protocol === "file:") {
+        const protocolMessage = "Google sign-in requires http://localhost or https://, not file://.";
+        if (loginError) loginError.textContent = protocolMessage;
+        return;
+    }
+
+    try {
+        const authorizeUrl = buildGoogleAuthorizeUrl();
+        window.location.assign(authorizeUrl);
+    } catch (error) {
+        const message = error?.message || "Could not start Google sign in.";
+        if (loginError) loginError.textContent = message;
+    }
+}
+
 async function bootstrapLoginPage() {
     const { data, error } = await supabase.auth.getSession();
     if (error) {
@@ -72,12 +105,12 @@ function wireProviderButtons() {
 
         button.addEventListener("click", async () => {
             const provider = button.dataset.provider;
-            if (!provider) {
+            if (!provider || provider === "google") {
                 return;
             }
 
             button.disabled = true;
-            loginError.textContent = "";
+            if (loginError) loginError.textContent = "";
 
             try {
                 const redirectUrl = new URL(window.location.pathname, window.location.origin);
@@ -101,15 +134,15 @@ function wireProviderButtons() {
 
                 window.location.assign(data.url);
             } catch (error) {
-                const message = error?.message || "Login failed. Please try again.";
-                const needsRedirectConfig =
-                    message.toLowerCase().includes("redirect") ||
+                console.error('OAuth sign-in error:', error);
+                const message = error?.message || (typeof error === 'string' ? error : "Login failed. Please try again.");
+                const needsRedirectConfig = message.toLowerCase().includes("redirect") ||
                     message.toLowerCase().includes("invalid") ||
                     message.toLowerCase().includes("not allowed");
-
-                loginError.textContent = needsRedirectConfig
+                const display = needsRedirectConfig
                     ? `${message} Check Supabase Auth redirect URLs for this site origin.`
                     : message;
+                if (loginError) loginError.textContent = display;
                 button.disabled = false;
             }
         });
@@ -127,4 +160,11 @@ bootstrapLoginPage().catch(() => {
     setStoredToken(null);
 });
 
+window.__flashlearnStartGoogleAuth = startGoogleAuth;
+if (window.location.protocol === "file:" && loginNote) {
+    loginNote.textContent = "Tip: run this page from localhost to use OAuth.";
+}
+if (googleLoginButton) {
+    googleLoginButton.disabled = false;
+}
 wireProviderButtons();

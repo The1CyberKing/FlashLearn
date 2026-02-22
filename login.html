@@ -17,7 +17,13 @@
             <p class="subhead">Access your profile and synced flashcards.</p>
 
             <div class="provider-list">
-                <button id="google-login-btn" class="provider-btn provider-google" data-provider="google" type="button">
+                <button
+                    id="google-login-btn"
+                    class="provider-btn provider-google"
+                    data-provider="google"
+                    type="button"
+                    onclick="window.__flashlearnStartGoogleAuth && window.__flashlearnStartGoogleAuth()"
+                >
                     Continue with Google
                 </button>
                 <button class="provider-btn provider-soon" data-provider="apple" type="button" disabled>
@@ -34,6 +40,38 @@
         </section>
     </main>
 
+    <script>
+        (function () {
+            const SUPABASE_URL = "https://sfxtsemiitbruxmdurva.supabase.co";
+            window.__flashlearnStartGoogleAuth = function () {
+                const loginError = document.getElementById("login-error");
+                if (loginError) loginError.textContent = "";
+
+                if (window.location.protocol === "file:") {
+                    if (loginError) {
+                        loginError.textContent = "Google sign-in requires http://localhost or https://, not file://.";
+                    }
+                    return;
+                }
+
+                try {
+                    const params = new URLSearchParams(window.location.search);
+                    const next = params.get("next") || "/profile.html";
+                    const loginReturnUrl = new URL(window.location.href);
+                    loginReturnUrl.searchParams.set("next", next);
+
+                    const authorizeUrl = new URL(`${SUPABASE_URL}/auth/v1/authorize`);
+                    authorizeUrl.searchParams.set("provider", "google");
+                    authorizeUrl.searchParams.set("redirect_to", loginReturnUrl.toString());
+                    window.location.assign(authorizeUrl.toString());
+                } catch (error) {
+                    if (loginError) {
+                        loginError.textContent = error?.message || "Could not start Google sign in.";
+                    }
+                }
+            };
+        })();
+    </script>
     <script type="module" src="login.js"></script>
 </body>
 </html>
