@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlashLearn Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="login.css">
+</head>
+<body>
+    <main class="login-shell">
+        <section class="login-card" aria-labelledby="login-title">
+            <p class="eyebrow">FlashLearn</p>
+            <h1 id="login-title">Sign in to continue</h1>
+            <p class="subhead">Access your profile and synced flashcards.</p>
+
+            <div class="provider-list">
+                <button id="google-login-btn" class="provider-btn provider-google" data-provider="google" type="button">
+                    Continue with Google
+                </button>
+                <button class="provider-btn provider-soon" data-provider="apple" type="button" disabled>
+                    Discord (Coming Soon)
+                </button>
+                <button class="provider-btn provider-soon" data-provider="github" type="button" disabled>
+                    GitHub (Coming Soon)
+                </button>
+            </div>
+
+            <p id="login-note" class="login-note"></p>
+            <p id="login-error" class="login-error" aria-live="polite"></p>
+            <a class="back-link" href="index.html">Back to Study Dashboard</a>
+        </section>
+    </main>
+
+    <script type="module" src="login.js"></script>
+</body>
+</html>
