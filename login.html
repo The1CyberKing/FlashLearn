@@ -43,6 +43,37 @@
     <script>
         (function () {
             const SUPABASE_URL = "https://sfxtsemiitbruxmdurva.supabase.co";
+            const hash = window.location.hash.startsWith("#")
+                ? window.location.hash.slice(1)
+                : window.location.hash;
+
+            function getHashParamValue(hashContent, key) {
+                const regex = new RegExp(`${key}=([^&#]+)`, "g");
+                const matches = Array.from(hashContent.matchAll(regex));
+                if (matches.length === 0) return null;
+                return decodeURIComponent(matches[matches.length - 1][1]);
+            }
+
+            function resolveNextPath() {
+                const params = new URLSearchParams(window.location.search);
+                const nextRaw = params.get("next") || "profile.html";
+                const resolved = new URL(nextRaw, window.location.href);
+                if (resolved.origin !== window.location.origin) {
+                    return new URL("profile.html", window.location.href).toString();
+                }
+                return resolved.toString();
+            }
+
+            if (hash) {
+                const callbackAccessToken = getHashParamValue(hash, "access_token");
+                if (callbackAccessToken) {
+                    localStorage.setItem("userToken", callbackAccessToken);
+                    window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
+                    window.location.replace(resolveNextPath());
+                    return;
+                }
+            }
+
             window.__flashlearnStartGoogleAuth = function () {
                 const loginError = document.getElementById("login-error");
                 if (loginError) loginError.textContent = "";
@@ -57,8 +88,9 @@
                 try {
                     const params = new URLSearchParams(window.location.search);
                     const next = params.get("next") || "profile.html";
-                    const loginReturnUrl = new URL(window.location.href);
+                    const loginReturnUrl = new URL(`${window.location.origin}${window.location.pathname}${window.location.search}`);
                     loginReturnUrl.searchParams.set("next", next);
+                    loginReturnUrl.hash = "";
 
                     const authorizeUrl = new URL(`${SUPABASE_URL}/auth/v1/authorize`);
                     authorizeUrl.searchParams.set("provider", "google");
@@ -72,6 +104,6 @@
             };
         })();
     </script>
-    <script type="module" src="login.js?v=2"></script>
+    <script type="module" src="login.js?v=3"></script>
 </body>
 </html>

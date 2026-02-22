@@ -56,6 +56,17 @@ function redirectToNext() {
     window.location.replace(nextPath);
 }
 
+function getHashParamValue(hashContent, key) {
+    const regex = new RegExp(`${key}=([^&#]+)`, "g");
+    const matches = Array.from(hashContent.matchAll(regex));
+    if (matches.length === 0) {
+        return null;
+    }
+
+    const lastMatch = matches[matches.length - 1];
+    return decodeURIComponent(lastMatch[1]);
+}
+
 function readTokensFromHash() {
     const hash = window.location.hash.startsWith("#")
         ? window.location.hash.slice(1)
@@ -65,9 +76,8 @@ function readTokensFromHash() {
         return null;
     }
 
-    const params = new URLSearchParams(hash);
-    const accessToken = params.get("access_token");
-    const refreshToken = params.get("refresh_token");
+    const accessToken = getHashParamValue(hash, "access_token");
+    const refreshToken = getHashParamValue(hash, "refresh_token");
 
     if (!accessToken || !refreshToken) {
         return null;
@@ -82,8 +92,9 @@ function clearUrlHash() {
 }
 
 function buildGoogleAuthorizeUrl() {
-    const loginReturnUrl = new URL(window.location.href);
+    const loginReturnUrl = new URL(`${window.location.origin}${window.location.pathname}${window.location.search}`);
     loginReturnUrl.searchParams.set("next", nextPath);
+    loginReturnUrl.hash = "";
 
     const authorizeUrl = new URL(`${SUPABASE_URL}/auth/v1/authorize`);
     authorizeUrl.searchParams.set("provider", "google");
@@ -122,15 +133,18 @@ async function bootstrapLoginPage() {
                 throw error;
             }
 
-            setStoredToken(data.session);
+            setStoredToken(data?.session || null);
             clearUrlHash();
             redirectToNext();
             return;
         } catch (error) {
+            localStorage.setItem("userToken", tokens.accessToken);
             clearUrlHash();
             const message = error?.message || "Could not complete sign in from callback.";
-            if (loginError) loginError.textContent = message;
-            setStoredToken(null);
+            if (loginNote) {
+                loginNote.textContent = `Continuing with token fallback (${message}).`;
+            }
+            redirectToNext();
             return;
         }
     }
@@ -142,7 +156,7 @@ async function bootstrapLoginPage() {
     }
 
     if (data?.session?.user) {
-        setStoredToken(data.session);
+        setStoredToken(data?.session || null);
         redirectToNext();
         return;
     }
