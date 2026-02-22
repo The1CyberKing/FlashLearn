@@ -96,8 +96,7 @@ function setAvatar(imageElement, fallbackElement, avatarUrl, initials) {
 }
 
 function getNextForLoginRedirect() {
-    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    return currentPath || "/profile.html";
+    return "index.html";
 }
 
 function redirectToLogin() {

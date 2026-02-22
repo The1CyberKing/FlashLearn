@@ -3,7 +3,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const SUPABASE_URL = "https://sfxtsemiitbruxmdurva.supabase.co";
 const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmeHRzZW1paXRicnV4bWR1cnZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMjE3NjcsImV4cCI6MjA4NTg5Nzc2N30.M4ErTSvcEIezdt72o-DBYFONe5l9UWWoQYGy2-HkaeA";
-const DEFAULT_NEXT_PATH = "profile.html";
+const DEFAULT_NEXT_PATH = "index.html";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -92,8 +92,7 @@ function clearUrlHash() {
 }
 
 function buildGoogleAuthorizeUrl() {
-    const loginReturnUrl = new URL(`${window.location.origin}${window.location.pathname}${window.location.search}`);
-    loginReturnUrl.searchParams.set("next", nextPath);
+    const loginReturnUrl = new URL(nextPath, window.location.origin);
     loginReturnUrl.hash = "";
 
     const authorizeUrl = new URL(`${SUPABASE_URL}/auth/v1/authorize`);
@@ -213,7 +212,7 @@ function wireProviderButtons() {
                 button.disabled = false;
             }
         });
-    }
+    });
 }
 
 supabase.auth.onAuthStateChange((_event, session) => {

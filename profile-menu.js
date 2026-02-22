@@ -37,7 +37,7 @@
         profileLink.addEventListener("click", (event) => {
             event.preventDefault();
             const hasToken = Boolean(localStorage.getItem("userToken"));
-            window.location.href = hasToken ? "profile.html" : "login.html?next=profile.html";
+            window.location.href = hasToken ? "profile.html" : "login.html?next=index.html";
         });
     }
 

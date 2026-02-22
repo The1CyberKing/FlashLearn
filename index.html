@@ -16,7 +16,39 @@
         localStorage.removeItem("userToken");
     }
 
+    function readTokensFromHash() {
+        const hash = window.location.hash.startsWith("#")
+            ? window.location.hash.slice(1)
+            : window.location.hash;
+        if (!hash) return null;
+
+        const params = new URLSearchParams(hash);
+        const accessToken = params.get("access_token");
+        const refreshToken = params.get("refresh_token");
+        if (!accessToken || !refreshToken) return null;
+        return { accessToken, refreshToken };
+    }
+
+    function clearHash() {
+        const cleanUrl = `${window.location.pathname}${window.location.search}`;
+        window.history.replaceState({}, document.title, cleanUrl);
+    }
+
     async function syncSession() {
+        const callbackTokens = readTokensFromHash();
+        if (callbackTokens) {
+            try {
+                await supabase.auth.setSession({
+                    access_token: callbackTokens.accessToken,
+                    refresh_token: callbackTokens.refreshToken,
+                });
+            } catch (callbackError) {
+                console.error("Failed to hydrate auth callback:", callbackError);
+            } finally {
+                clearHash();
+            }
+        }
+
         const { data, error } = await supabase.auth.getSession();
         if (error) {
             console.error("Failed to read Supabase session:", error);
@@ -95,7 +127,7 @@
             <span class="sr-only">Open profile menu</span>
         </button>
         <div id="profile-menu" class="profile-menu" role="menu" aria-label="Profile menu" hidden>
-            <a class="profile-menu-item" role="menuitem" data-profile-link href="login.html?next=profile.html">Profile</a>
+            <a class="profile-menu-item" role="menuitem" data-profile-link href="login.html?next=index.html">Profile</a>
             <button class="profile-menu-item profile-menu-item-danger" type="button" role="menuitem" onclick="logout()">
                 Log Out
             </button>

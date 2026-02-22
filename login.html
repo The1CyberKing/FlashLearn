@@ -56,10 +56,10 @@
 
             function resolveNextPath() {
                 const params = new URLSearchParams(window.location.search);
-                const nextRaw = params.get("next") || "profile.html";
+                const nextRaw = params.get("next") || "index.html";
                 const resolved = new URL(nextRaw, window.location.href);
                 if (resolved.origin !== window.location.origin) {
-                    return new URL("profile.html", window.location.href).toString();
+                    return new URL("index.html", window.location.href).toString();
                 }
                 return resolved.toString();
             }
@@ -87,9 +87,8 @@
 
                 try {
                     const params = new URLSearchParams(window.location.search);
-                    const next = params.get("next") || "profile.html";
-                    const loginReturnUrl = new URL(`${window.location.origin}${window.location.pathname}${window.location.search}`);
-                    loginReturnUrl.searchParams.set("next", next);
+                    const next = params.get("next") || "index.html";
+                    const loginReturnUrl = new URL(next, window.location.href);
                     loginReturnUrl.hash = "";
 
                     const authorizeUrl = new URL(`${SUPABASE_URL}/auth/v1/authorize`);
@@ -104,6 +103,6 @@
             };
         })();
     </script>
-    <script type="module" src="login.js?v=3"></script>
+    <script type="module" src="login.js?v=4"></script>
 </body>
 </html>
