@@ -129,6 +129,15 @@ body::after {
     box-shadow: inset 0 0 0 1px rgba(26, 47, 60, 0.1);
 }
 
+.profile-avatar-image {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255, 255, 255, 0.95);
+    box-shadow: inset 0 0 0 1px rgba(26, 47, 60, 0.1);
+}
+
 .profile-caret {
     width: 16px;
     height: 16px;
@@ -1069,6 +1078,11 @@ button:active {
     }
 
     .profile-avatar {
+        width: 32px;
+        height: 32px;
+    }
+
+    .profile-avatar-image {
         width: 32px;
         height: 32px;
     }

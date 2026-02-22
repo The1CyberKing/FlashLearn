@@ -68,6 +68,7 @@
                 const callbackAccessToken = getHashParamValue(hash, "access_token");
                 if (callbackAccessToken) {
                     localStorage.setItem("userToken", callbackAccessToken);
+                    sessionStorage.setItem("showWelcomeAfterAuth", "1");
                     window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
                     window.location.replace(resolveNextPath());
                     return;
@@ -77,6 +78,7 @@
             window.__flashlearnStartGoogleAuth = function () {
                 const loginError = document.getElementById("login-error");
                 if (loginError) loginError.textContent = "";
+                sessionStorage.setItem("showWelcomeAfterAuth", "1");
 
                 if (window.location.protocol === "file:") {
                     if (loginError) {

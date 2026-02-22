@@ -16,6 +16,44 @@
         localStorage.removeItem("userToken");
     }
 
+    function getDisplayName(user) {
+        const metadata = user?.user_metadata || {};
+        return (
+            metadata.full_name ||
+            metadata.name ||
+            user?.email ||
+            "Learner"
+        );
+    }
+
+    function getInitials(displayName) {
+        const parts = (displayName || "").trim().split(/\s+/).filter(Boolean);
+        if (parts.length === 0) return "FL";
+        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+        return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+
+    function syncHeaderAvatar(user) {
+        const avatarImage = document.getElementById("header-profile-avatar-image");
+        const avatarFallback = document.getElementById("header-profile-avatar-fallback");
+        if (!avatarImage || !avatarFallback) return;
+
+        const displayName = getDisplayName(user);
+        const metadata = user?.user_metadata || {};
+        const avatarUrl = metadata.avatar_url || metadata.picture || "";
+
+        if (avatarUrl) {
+            avatarImage.src = avatarUrl;
+            avatarImage.hidden = false;
+            avatarFallback.hidden = true;
+            return;
+        }
+
+        avatarImage.hidden = true;
+        avatarFallback.hidden = false;
+        avatarFallback.textContent = getInitials(displayName);
+    }
+
     function readTokensFromHash() {
         const hash = window.location.hash.startsWith("#")
             ? window.location.hash.slice(1)
@@ -57,6 +95,7 @@
         }
 
         setStoredToken(data.session);
+        syncHeaderAvatar(data.session?.user || null);
 
         const shouldShowWelcome = sessionStorage.getItem("showWelcomeAfterAuth") === "1";
         if (shouldShowWelcome && data.session?.user) {
@@ -73,6 +112,7 @@
 
     supabase.auth.onAuthStateChange((_event, session) => {
         setStoredToken(session);
+        syncHeaderAvatar(session?.user || null);
     });
 
     window.login = async () => {
@@ -120,7 +160,13 @@
             aria-expanded="false"
             aria-controls="profile-menu"
         >
-            <span class="profile-avatar" aria-hidden="true">JS</span>
+            <img
+                id="header-profile-avatar-image"
+                class="profile-avatar-image"
+                alt="Profile avatar"
+                hidden
+            />
+            <span id="header-profile-avatar-fallback" class="profile-avatar" aria-hidden="true">FL</span>
             <svg class="profile-caret" viewBox="0 0 16 16" aria-hidden="true">
                 <path d="M4.22 6.72a.75.75 0 0 1 1.06 0L8 9.44l2.72-2.72a.75.75 0 0 1 1.06 1.06L8.53 11.03a.75.75 0 0 1-1.06 0L4.22 7.78a.75.75 0 0 1 0-1.06z"/>
             </svg>

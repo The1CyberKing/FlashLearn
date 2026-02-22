@@ -103,6 +103,7 @@ function buildGoogleAuthorizeUrl() {
 
 function startGoogleAuth() {
     if (loginError) loginError.textContent = "";
+    sessionStorage.setItem("showWelcomeAfterAuth", "1");
 
     if (window.location.protocol === "file:") {
         const protocolMessage = "Google sign-in requires http://localhost or https://, not file://.";
@@ -133,11 +134,13 @@ async function bootstrapLoginPage() {
             }
 
             setStoredToken(data?.session || null);
+            sessionStorage.setItem("showWelcomeAfterAuth", "1");
             clearUrlHash();
             redirectToNext();
             return;
         } catch (error) {
             localStorage.setItem("userToken", tokens.accessToken);
+            sessionStorage.setItem("showWelcomeAfterAuth", "1");
             clearUrlHash();
             const message = error?.message || "Could not complete sign in from callback.";
             if (loginNote) {
