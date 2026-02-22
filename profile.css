@@ -102,6 +102,13 @@ body.profile-loading .profile-main[hidden] {
     border: 1px solid rgba(20, 20, 20, 0.08);
 }
 
+.topbar-avatar-image[hidden],
+.topbar-avatar[hidden],
+.hero-avatar-image[hidden],
+.hero-avatar[hidden] {
+    display: none !important;
+}
+
 .topbar-avatar {
     width: 30px;
     height: 30px;
@@ -262,6 +269,80 @@ body.profile-loading .profile-main[hidden] {
     word-break: break-word;
 }
 
+.setting-value-avatar {
+    font-family: "Manrope", "Segoe UI", sans-serif;
+    font-size: 0.95rem;
+    color: var(--ink-2);
+}
+
+.avatar-picker {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.avatar-choice {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    background: linear-gradient(160deg, #dbe8ff, #bdd9f1);
+    color: #20415c;
+    font-size: 1rem;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+}
+
+.avatar-choice[data-avatar="google"] {
+    font-size: 0.86rem;
+    font-weight: 700;
+    background: linear-gradient(160deg, #dbe8ff, #bdd9f1);
+}
+
+.avatar-choice[data-avatar="fox"] {
+    background: linear-gradient(160deg, #ffd7ad, #f1a35f);
+}
+
+.avatar-choice[data-avatar="owl"] {
+    background: linear-gradient(160deg, #e5d6ff, #bca8f1);
+}
+
+.avatar-choice[data-avatar="panda"] {
+    background: linear-gradient(160deg, #e4eef5, #bdd0de);
+}
+
+.avatar-choice[data-avatar="whale"] {
+    background: linear-gradient(160deg, #c7ebff, #8fc3e7);
+}
+
+.avatar-choice[data-avatar="cat"] {
+    background: linear-gradient(160deg, #ffe2cf, #f4b28c);
+}
+
+.avatar-choice:hover {
+    transform: translateY(-1px);
+}
+
+.avatar-choice.is-active {
+    border-color: rgba(15, 76, 92, 0.45);
+    box-shadow: 0 0 0 3px rgba(15, 76, 92, 0.14);
+}
+
+.topbar-avatar.avatar-custom {
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+.hero-avatar.avatar-custom {
+    font-size: 2rem;
+    line-height: 1;
+}
+
 @media (max-width: 760px) {
     .profile-shell {
         width: calc(100% - 1rem);
@@ -312,5 +393,11 @@ body.profile-loading .profile-main[hidden] {
     .setting-row button {
         padding: 8px 16px;
         min-width: 70px;
+    }
+
+    .avatar-choice {
+        width: 34px;
+        height: 34px;
+        font-size: 0.92rem;
     }
 }
