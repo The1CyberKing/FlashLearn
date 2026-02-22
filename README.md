@@ -8,9 +8,9 @@ You can now:
 - Assign cards to a collection when creating cards
 - Filter the flashcard view by selected collection
 - Fetch cards by collection through dedicated API endpoints
-- Switch between `All Cards` and `Due Cards` study mode
-- Rate each review as `Again`, `Hard`, `Good`, or `Easy`
-- Track learning progress in a dashboard (due now, mastered, accuracy, reviewed today, weak cards)
+- Use a dedicated collection-based pop quiz page
+- Rate each quiz outcome through review updates (`again`, `hard`, `easy`)
+- Track learning progress in a dashboard (total, mastered, accuracy, reviewed today)
 
 ## Backend Overview
 
@@ -117,6 +117,16 @@ All endpoints below require a Supabase bearer token in `Authorization` header.
   - Allowed ratings: `again`, `hard`, `good`, `easy`
   - Updates review stats and schedules the next due time for that card.
 
+- `POST /cards/reset-progress`
+  - Body:
+    ```json
+    {
+      "collection_id": 123
+    }
+    ```
+  - `collection_id` is optional (`null` resets all of the user's cards).
+  - Resets performance fields to defaults (`review_count`, `correct_count`, `ease_factor`, `interval_days`, `last_reviewed_at`, streaks).
+
 ## Frontend Changes
 
 Updated files:
@@ -132,9 +142,10 @@ Added UI:
 - `New Collection` button
 - Active collection label
 - `Study Mode` button on the main page that opens a dedicated quiz webpage
-- Quiz webpage with `Due Cards` / `All Cards` mode toggle
+- Quiz webpage with collection-based pop-quiz flow
 - Quiz webpage pop-quiz input (type answer and check)
-- Quiz webpage progress dashboard for total, due, mastered, accuracy, and reviewed today
+- Quiz webpage progress dashboard for total, mastered, accuracy, and reviewed today
+- Quiz `Refresh` button resets selected-scope performance stats to defaults
 
 Behavior:
 - Cards are fetched according to the selected collection.

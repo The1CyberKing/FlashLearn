@@ -5,17 +5,14 @@ let collections = [];
 let allCards = [];
 let filteredCards = [];
 let activeCollection = "all";
-let studyMode = "due";
 let currentIndex = 0;
 const quizAttemptsByCard = new Map();
 
 const collectionSelect = document.getElementById("quiz-collection-select");
-const modeToggleButton = document.getElementById("quiz-mode-toggle");
 const refreshButton = document.getElementById("refresh-cards-btn");
 const activeScopeText = document.getElementById("quiz-active-scope");
 
 const totalCardsElement = document.getElementById("quiz-total");
-const dueCardsElement = document.getElementById("quiz-due");
 const masteredCardsElement = document.getElementById("quiz-mastered");
 const accuracyElement = document.getElementById("quiz-accuracy");
 const reviewedTodayElement = document.getElementById("quiz-reviewed-today");
@@ -27,10 +24,13 @@ const answerForm = document.getElementById("quiz-answer-form");
 const answerInput = document.getElementById("quiz-answer-input");
 const revealButton = document.getElementById("reveal-answer-btn");
 const cardIndexElement = document.getElementById("quiz-card-index");
-const dueInfoElement = document.getElementById("quiz-due-info");
 const prevButton = document.getElementById("quiz-prev-btn");
 const nextButton = document.getElementById("quiz-next-btn");
 const statusElement = document.getElementById("quiz-status");
+const resetConfirmModal = document.getElementById("reset-confirm-modal");
+const resetConfirmMessage = document.getElementById("reset-confirm-message");
+const resetConfirmCancelButton = document.getElementById("reset-confirm-cancel");
+const resetConfirmAcceptButton = document.getElementById("reset-confirm-accept");
 
 document.addEventListener("DOMContentLoaded", initializeQuizPage);
 
@@ -83,12 +83,6 @@ function isSameLocalDay(dateA, dateB) {
         && dateA.getDate() === dateB.getDate();
 }
 
-function isCardDue(card, referenceDate = new Date()) {
-    const dueDate = toDateOrNull(card?.due_at);
-    if (!dueDate) return true;
-    return dueDate.getTime() <= referenceDate.getTime();
-}
-
 function getCardAccuracy(card) {
     const reviews = toNonNegativeInteger(card?.review_count, 0);
     if (reviews <= 0) return null;
@@ -136,34 +130,7 @@ function getScopedCards() {
 }
 
 function getVisibleCards() {
-    const scopedCards = getScopedCards();
-    if (studyMode !== "due") return scopedCards;
-
-    return scopedCards
-        .filter((card) => isCardDue(card))
-        .sort((left, right) => {
-            const leftDue = toDateOrNull(left?.due_at);
-            const rightDue = toDateOrNull(right?.due_at);
-            if (!leftDue && !rightDue) return 0;
-            if (!leftDue) return -1;
-            if (!rightDue) return 1;
-            return leftDue.getTime() - rightDue.getTime();
-        });
-}
-
-function formatDueInfo(card) {
-    if (!card) return "No due date";
-    const dueDate = toDateOrNull(card.due_at);
-    if (!dueDate) return "Due now";
-
-    const now = new Date();
-    if (dueDate.getTime() <= now.getTime()) {
-        return "Due now";
-    }
-    if (isSameLocalDay(dueDate, now)) {
-        return `Due today at ${dueDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
-    }
-    return `Due ${dueDate.toLocaleDateString([], { month: "short", day: "numeric" })}`;
+    return getScopedCards();
 }
 
 function setStatus(message, tone = "info") {
@@ -198,7 +165,6 @@ function renderCollectionOptions() {
 function updateDashboard() {
     const scopedCards = getScopedCards();
     const totalCards = scopedCards.length;
-    const dueCards = scopedCards.filter((card) => isCardDue(card)).length;
     const masteredCards = scopedCards.filter((card) => isCardMastered(card)).length;
     const totalReviews = scopedCards.reduce((sum, card) => sum + toNonNegativeInteger(card.review_count, 0), 0);
     const totalCorrect = scopedCards.reduce((sum, card) => sum + toNonNegativeInteger(card.correct_count, 0), 0);
@@ -209,23 +175,17 @@ function updateDashboard() {
     const accuracy = totalReviews > 0 ? Math.round((totalCorrect / totalReviews) * 100) : 0;
 
     if (totalCardsElement) totalCardsElement.textContent = String(totalCards);
-    if (dueCardsElement) dueCardsElement.textContent = String(dueCards);
     if (masteredCardsElement) masteredCardsElement.textContent = String(masteredCards);
     if (accuracyElement) accuracyElement.textContent = `${accuracy}%`;
     if (reviewedTodayElement) reviewedTodayElement.textContent = String(reviewedToday);
 }
 
 function updateModeUI() {
-    if (modeToggleButton) {
-        modeToggleButton.textContent = studyMode === "due" ? "Mode: Due Cards" : "Mode: All Cards";
-    }
-
     const selectedCollection = activeCollection === "all"
         ? null
         : collections.find((collection) => String(collection.id) === String(activeCollection)) || null;
-    const modeLabel = studyMode === "due" ? "Due Cards" : "All Cards";
     if (activeScopeText) {
-        activeScopeText.textContent = `Scope: ${getCollectionDisplayName(selectedCollection)} · ${modeLabel}`;
+        activeScopeText.textContent = `Scope: ${getCollectionDisplayName(selectedCollection)}`;
     }
 }
 
@@ -253,25 +213,15 @@ function renderCard() {
         if (questionElement) questionElement.textContent = "Please log in to start Quiz Mode.";
         if (answerElement) answerElement.textContent = "Correct answer will appear here.";
         if (cardIndexElement) cardIndexElement.textContent = "0 / 0";
-        if (dueInfoElement) dueInfoElement.textContent = "No due date";
         resetAnswerView();
         updateInteractionState();
         return;
     }
 
     if (!filteredCards.length) {
-        if (questionElement) {
-            questionElement.textContent = studyMode === "due"
-                ? "No due cards right now."
-                : "No cards in this scope yet.";
-        }
-        if (answerElement) {
-            answerElement.textContent = studyMode === "due"
-                ? "Switch to All Cards or come back later."
-                : "Add cards from the main page and refresh.";
-        }
+        if (questionElement) questionElement.textContent = "No cards in this scope yet.";
+        if (answerElement) answerElement.textContent = "Add cards from the main page and refresh.";
         if (cardIndexElement) cardIndexElement.textContent = "0 / 0";
-        if (dueInfoElement) dueInfoElement.textContent = "No due date";
         resetAnswerView();
         updateInteractionState();
         return;
@@ -281,7 +231,6 @@ function renderCard() {
     if (questionElement) questionElement.textContent = card.question || "Untitled card";
     if (answerElement) answerElement.textContent = card.answer || "No answer";
     if (cardIndexElement) cardIndexElement.textContent = `${currentIndex + 1} / ${filteredCards.length}`;
-    if (dueInfoElement) dueInfoElement.textContent = formatDueInfo(card);
     resetAnswerView();
     updateInteractionState();
 }
@@ -434,6 +383,106 @@ async function refreshData() {
     await fetchCards();
 }
 
+function isConfirmModalOpen() {
+    return Boolean(resetConfirmModal?.classList.contains("is-open"));
+}
+
+function openConfirmModal() {
+    if (!resetConfirmModal) return;
+    resetConfirmModal.classList.add("is-open");
+    resetConfirmModal.setAttribute("aria-hidden", "false");
+}
+
+function closeConfirmModal() {
+    if (!resetConfirmModal) return;
+    resetConfirmModal.classList.remove("is-open");
+    resetConfirmModal.setAttribute("aria-hidden", "true");
+}
+
+function showResetConfirm(scopeLabel) {
+    if (!resetConfirmModal || !resetConfirmMessage || !resetConfirmCancelButton || !resetConfirmAcceptButton) {
+        return Promise.resolve(window.confirm("Reset performance stats?"));
+    }
+
+    resetConfirmMessage.textContent =
+        `This will reset accuracy, mastery, reviewed-today, and streak data for ${scopeLabel}.`;
+    openConfirmModal();
+
+    return new Promise((resolve) => {
+        const finish = (confirmed) => {
+            closeConfirmModal();
+            resetConfirmCancelButton.removeEventListener("click", onCancel);
+            resetConfirmAcceptButton.removeEventListener("click", onAccept);
+            resetConfirmModal.removeEventListener("click", onOverlayClick);
+            document.removeEventListener("keydown", onEscape);
+            resolve(confirmed);
+        };
+
+        const onCancel = () => finish(false);
+        const onAccept = () => finish(true);
+        const onOverlayClick = (event) => {
+            if (event.target === resetConfirmModal) finish(false);
+        };
+        const onEscape = (event) => {
+            if (event.key === "Escape") finish(false);
+        };
+
+        resetConfirmCancelButton.addEventListener("click", onCancel);
+        resetConfirmAcceptButton.addEventListener("click", onAccept);
+        resetConfirmModal.addEventListener("click", onOverlayClick);
+        document.addEventListener("keydown", onEscape);
+    });
+}
+
+async function resetProgressStats() {
+    if (!hasValidToken()) {
+        setStatus("Please log in to reset quiz stats.", "error");
+        return;
+    }
+
+    const selectedCollection = activeCollection === "all"
+        ? null
+        : collections.find((collection) => String(collection.id) === String(activeCollection)) || null;
+    const scopeLabel = selectedCollection ? getCollectionDisplayName(selectedCollection) : "all collections";
+    const selectedCollectionId = activeCollection === "all" ? null : Number.parseInt(activeCollection, 10);
+
+    if (activeCollection !== "all" && !Number.isInteger(selectedCollectionId)) {
+        setStatus("Invalid collection scope. Please reselect the collection.", "error");
+        return;
+    }
+
+    const confirmed = await showResetConfirm(scopeLabel);
+    if (!confirmed) return;
+
+    if (refreshButton) refreshButton.disabled = true;
+    try {
+        const response = await fetch(`${API_URL}/cards/reset-progress`, {
+            method: "POST",
+            headers: getHeaders(),
+            body: JSON.stringify({
+                collection_id: selectedCollectionId,
+            }),
+        });
+
+        const payload = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+            throw new Error("Session expired. Please log in again.");
+        }
+        if (!response.ok) {
+            throw new Error(payload.detail || `Could not reset stats (HTTP ${response.status}).`);
+        }
+
+        quizAttemptsByCard.clear();
+        await fetchCards();
+        setStatus(`Reset progress for ${payload.cards_reset || 0} card(s).`, "success");
+    } catch (error) {
+        console.error("Reset progress failed:", error);
+        setStatus(error?.message || "Could not reset progress right now.", "error");
+    } finally {
+        if (refreshButton) refreshButton.disabled = false;
+    }
+}
+
 async function submitReview(cardId, rating) {
     if (!REVIEW_RATINGS.includes(rating)) {
         throw new Error("Unsupported rating value.");
@@ -527,17 +576,8 @@ function setupEvents() {
         });
     }
 
-    if (modeToggleButton) {
-        modeToggleButton.addEventListener("click", () => {
-            studyMode = studyMode === "due" ? "all" : "due";
-            applyFilters({ resetIndex: true });
-            setStatus("");
-            answerInput?.focus();
-        });
-    }
-
     if (refreshButton) {
-        refreshButton.addEventListener("click", refreshData);
+        refreshButton.addEventListener("click", resetProgressStats);
     }
 
     if (answerForm) {
@@ -552,6 +592,8 @@ function setupEvents() {
     if (prevButton) prevButton.addEventListener("click", prevCard);
 
     document.addEventListener("keydown", (event) => {
+        if (isConfirmModalOpen()) return;
+
         const activeTag = document.activeElement?.tagName?.toLowerCase();
         const isTyping = activeTag === "input" || activeTag === "textarea" || document.activeElement?.isContentEditable;
 
@@ -580,10 +622,8 @@ function setupEvents() {
 function applyQueryParams() {
     const params = new URLSearchParams(window.location.search);
     const collection = params.get("collection");
-    const mode = params.get("mode");
 
     if (collection) activeCollection = collection;
-    if (mode === "all" || mode === "due") studyMode = mode;
 }
 
 async function initializeQuizPage() {

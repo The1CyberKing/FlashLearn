@@ -98,7 +98,7 @@ body {
     box-shadow: var(--shadow-md);
     padding: 14px;
     display: grid;
-    grid-template-columns: 130px minmax(220px, 1fr) auto auto;
+    grid-template-columns: 130px minmax(220px, 1fr) auto;
     gap: 10px;
     align-items: center;
 }
@@ -121,7 +121,7 @@ body {
 
 .quiz-dashboard {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 10px;
 }
 
@@ -264,6 +264,64 @@ body {
     color: var(--danger);
 }
 
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(26, 22, 17, 0.44);
+    backdrop-filter: blur(5px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.modal-overlay.is-open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.modal-dialog {
+    width: min(500px, 100%);
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: linear-gradient(155deg, rgba(255, 252, 246, 0.98), rgba(245, 235, 220, 0.95));
+    box-shadow: var(--shadow-lg);
+    padding: 18px;
+    text-align: left;
+}
+
+.modal-dialog h2 {
+    margin: 0 0 8px;
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-size: clamp(1.6rem, 3vw, 2rem);
+}
+
+.modal-dialog p {
+    margin: 0;
+    color: var(--ink-2);
+    font-size: 0.95rem;
+    line-height: 1.45;
+}
+
+.modal-actions {
+    margin-top: 14px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.modal-cancel-btn {
+    background: linear-gradient(160deg, #72736d, #5b5c56);
+}
+
+.modal-danger-btn {
+    background: linear-gradient(160deg, #b84a34, #982f1d);
+}
+
 button {
     border: 1px solid transparent;
     border-radius: 999px;
@@ -352,6 +410,14 @@ button:disabled {
     }
 
     .answer-form .check-btn {
+        width: 100%;
+    }
+
+    .modal-actions {
+        flex-direction: column-reverse;
+    }
+
+    .modal-actions button {
         width: 100%;
     }
 }

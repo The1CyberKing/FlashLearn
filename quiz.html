@@ -82,7 +82,6 @@
             <select id="quiz-collection-select">
                 <option value="all">All Collections</option>
             </select>
-            <button id="quiz-mode-toggle" type="button">Mode: Due Cards</button>
             <button id="refresh-cards-btn" type="button">Refresh</button>
         </section>
 
@@ -90,10 +89,6 @@
             <article class="dash-card">
                 <p>Total Cards</p>
                 <strong id="quiz-total">0</strong>
-            </article>
-            <article class="dash-card">
-                <p>Due Now</p>
-                <strong id="quiz-due">0</strong>
             </article>
             <article class="dash-card">
                 <p>Mastered</p>
@@ -126,7 +121,6 @@
 
             <div class="quiz-meta">
                 <span id="quiz-card-index">0 / 0</span>
-                <span id="quiz-due-info">No due date</span>
             </div>
 
             <div class="quiz-nav">
@@ -137,6 +131,19 @@
             <p id="quiz-status" class="quiz-status"></p>
         </section>
     </main>
+
+    <div id="reset-confirm-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="reset-confirm-title">
+            <h2 id="reset-confirm-title">Reset Performance Stats?</h2>
+            <p id="reset-confirm-message">
+                This will clear accuracy and mastery history for the selected scope.
+            </p>
+            <div class="modal-actions">
+                <button id="reset-confirm-cancel" type="button" class="modal-cancel-btn">Cancel</button>
+                <button id="reset-confirm-accept" type="button" class="modal-danger-btn">Reset Stats</button>
+            </div>
+        </div>
+    </div>
 
     <script src="quiz.js"></script>
 </body>

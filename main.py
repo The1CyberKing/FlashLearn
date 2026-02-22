@@ -228,6 +228,10 @@ class CardReviewSchema(BaseModel):
     rating: str
 
 
+class CardProgressResetSchema(BaseModel):
+    collection_id: Optional[int] = None
+
+
 def normalize_collection_color(color: Optional[str]) -> str:
     if not color:
         return DEFAULT_COLLECTION_COLOR
@@ -584,3 +588,37 @@ def review_card(
         "result": result,
         "card": serialize_card(db_card),
     }
+
+
+@app.post("/cards/reset-progress")
+def reset_card_progress(
+    payload: CardProgressResetSchema,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    reset_query = db.query(CardDB).filter(CardDB.user_id == user_id)
+
+    if payload.collection_id is not None:
+        get_owned_collection(payload.collection_id, user_id, db)
+        reset_query = reset_query.filter(CardDB.collection_id == payload.collection_id)
+
+    cards_to_reset = reset_query.count()
+    if cards_to_reset == 0:
+        return {"message": "No cards to reset", "cards_reset": 0}
+
+    reset_query.update(
+        {
+            CardDB.review_count: 0,
+            CardDB.correct_count: 0,
+            CardDB.ease_factor: 2.5,
+            CardDB.interval_days: 0,
+            CardDB.due_at: utc_now(),
+            CardDB.last_reviewed_at: None,
+            CardDB.streak_current: 0,
+            CardDB.streak_best: 0,
+        },
+        synchronize_session=False,
+    )
+    db.commit()
+
+    return {"message": "Card progress reset", "cards_reset": cards_to_reset}
