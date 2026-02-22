@@ -83,9 +83,10 @@ function wireProviderButtons() {
                 const redirectUrl = new URL(window.location.pathname, window.location.origin);
                 redirectUrl.searchParams.set("next", nextPath);
 
-                const { error } = await supabase.auth.signInWithOAuth({
+                const { data, error } = await supabase.auth.signInWithOAuth({
                     provider,
                     options: {
+                        skipBrowserRedirect: true,
                         redirectTo: redirectUrl.toString(),
                     },
                 });
@@ -93,8 +94,22 @@ function wireProviderButtons() {
                 if (error) {
                     throw error;
                 }
+
+                if (!data?.url) {
+                    throw new Error("Could not start OAuth redirect. Please try again.");
+                }
+
+                window.location.assign(data.url);
             } catch (error) {
-                loginError.textContent = error?.message || "Login failed. Please try again.";
+                const message = error?.message || "Login failed. Please try again.";
+                const needsRedirectConfig =
+                    message.toLowerCase().includes("redirect") ||
+                    message.toLowerCase().includes("invalid") ||
+                    message.toLowerCase().includes("not allowed");
+
+                loginError.textContent = needsRedirectConfig
+                    ? `${message} Check Supabase Auth redirect URLs for this site origin.`
+                    : message;
                 button.disabled = false;
             }
         });
