@@ -141,20 +141,31 @@ function renderUserProfile(user) {
 async function initializeProfile() {
     const { data, error } = await supabase.auth.getSession();
 
-    if (error || !data?.session?.user) {
-        setStoredToken(null);
-        redirectToLogin();
+    if (!error && data?.session?.user) {
+        setStoredToken(data.session);
+        renderUserProfile(data.session.user);
+        revealProfile();
         return;
     }
 
-    setStoredToken(data.session);
-    renderUserProfile(data.session.user);
-    revealProfile();
+    const token = localStorage.getItem("userToken");
+    if (token) {
+        const { data: userData, error: userError } = await supabase.auth.getUser(token);
+        if (!userError && userData?.user) {
+            setStoredToken({ access_token: token });
+            renderUserProfile(userData.user);
+            revealProfile();
+            return;
+        }
+    }
+
+    setStoredToken(null);
+    redirectToLogin();
 }
 
-supabase.auth.onAuthStateChange((_event, session) => {
+supabase.auth.onAuthStateChange((event, session) => {
     setStoredToken(session);
-    if (!session?.user) {
+    if (event === "SIGNED_OUT") {
         redirectToLogin();
     }
 });

@@ -56,7 +56,7 @@
 
                 try {
                     const params = new URLSearchParams(window.location.search);
-                    const next = params.get("next") || "/profile.html";
+                    const next = params.get("next") || "profile.html";
                     const loginReturnUrl = new URL(window.location.href);
                     loginReturnUrl.searchParams.set("next", next);
 
@@ -72,6 +72,6 @@
             };
         })();
     </script>
-    <script type="module" src="login.js"></script>
+    <script type="module" src="login.js?v=2"></script>
 </body>
 </html>
