@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+    const SUPABASE_URL = "https://sfxtsemiitbruxmdurva.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmeHRzZW1paXRicnV4bWR1cnZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMjE3NjcsImV4cCI6MjA4NTg5Nzc2N30.M4ErTSvcEIezdt72o-DBYFONe5l9UWWoQYGy2-HkaeA";
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    function setStoredToken(session) {
+        if (session?.access_token) {
+            localStorage.setItem("userToken", session.access_token);
+            return;
+        }
+        localStorage.removeItem("userToken");
+    }
+
+    async function syncSession() {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+            console.error("Failed to read Supabase session:", error);
+            localStorage.removeItem("userToken");
+            return;
+        }
+        setStoredToken(data.session);
+    }
+
+    window.authReady = syncSession();
+
+    supabase.auth.onAuthStateChange((_event, session) => {
+        setStoredToken(session);
+    });
+
+    window.login = async () => {
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: "google",
+            options: {
+                redirectTo: `${window.location.origin}${window.location.pathname}`,
+            },
+        });
+
+        if (error) {
+            console.error(error);
+            alert("Login failed");
+        }
+    };
+
+    window.logout = async () => {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+            console.error("Logout failed:", error);
+        }
+        localStorage.removeItem("userToken");
+        location.reload();
+    };
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlashLearn Quiz Mode</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="quiz.css">
+</head>
+<body>
+    <div class="auth-controls">
+        <button class="login-btn" onclick="login()">Login with Google</button>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+
+    <main class="quiz-shell">
+        <header class="quiz-header">
+            <a href="index.html" class="back-link">&#8592; Back to Flashcards</a>
+            <p class="eyebrow">FlashLearn</p>
+            <h1>Quiz Mode</h1>
+            <p class="subhead">Focused review with spaced repetition and live performance tracking.</p>
+        </header>
+
+        <section class="quiz-controls">
+            <label for="quiz-collection-select">Collection</label>
+            <select id="quiz-collection-select">
+                <option value="all">All Collections</option>
+            </select>
+            <button id="quiz-mode-toggle" type="button">Mode: Due Cards</button>
+            <button id="refresh-cards-btn" type="button">Refresh</button>
+        </section>
+
+        <section class="quiz-dashboard" aria-live="polite">
+            <article class="dash-card">
+                <p>Total Cards</p>
+                <strong id="quiz-total">0</strong>
+            </article>
+            <article class="dash-card">
+                <p>Due Now</p>
+                <strong id="quiz-due">0</strong>
+            </article>
+            <article class="dash-card">
+                <p>Mastered</p>
+                <strong id="quiz-mastered">0</strong>
+            </article>
+            <article class="dash-card">
+                <p>Accuracy</p>
+                <strong id="quiz-accuracy">0%</strong>
+            </article>
+            <article class="dash-card">
+                <p>Reviewed Today</p>
+                <strong id="quiz-reviewed-today">0</strong>
+            </article>
+        </section>
+
+        <section class="quiz-panel">
+            <p id="quiz-active-scope" class="quiz-active-scope">Scope: All Collections</p>
+            <div class="quiz-card">
+                <h2 id="quiz-question">Log in to start quiz mode.</h2>
+                <p class="answer-prompt">Type your answer, then check it.</p>
+                <form id="quiz-answer-form" class="answer-form">
+                    <input id="quiz-answer-input" type="text" placeholder="Type your answer..." autocomplete="off" />
+                    <button type="submit" class="check-btn">Check Answer</button>
+                </form>
+                <div id="quiz-answer-wrap" class="quiz-answer-wrap is-hidden">
+                    <p id="quiz-answer">Answer will appear here.</p>
+                </div>
+                <button id="reveal-answer-btn" type="button" class="reveal-btn">Show Correct Answer</button>
+            </div>
+
+            <div class="quiz-meta">
+                <span id="quiz-card-index">0 / 0</span>
+                <span id="quiz-due-info">No due date</span>
+            </div>
+
+            <div class="quiz-nav">
+                <button id="quiz-prev-btn" type="button">&#8592; Previous</button>
+                <button id="quiz-next-btn" type="button">Next &#8594;</button>
+            </div>
+
+            <p id="quiz-status" class="quiz-status"></p>
+        </section>
+    </main>
+
+    <script src="quiz.js"></script>
+</body>
+</html>

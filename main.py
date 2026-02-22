@@ -1,6 +1,7 @@
 # main.py
 import os
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jwt
@@ -9,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from jwt import InvalidTokenError, PyJWKClient
 from jwt.exceptions import PyJWKClientError
 from pydantic import BaseModel
-from sqlalchemy import Column, Integer, String, create_engine, inspect, text
+from sqlalchemy import Column, DateTime, Float, Integer, String, create_engine, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -46,6 +47,14 @@ class CardDB(Base):
     question = Column(String)
     answer = Column(String)
     collection_id = Column(Integer, nullable=True, index=True)
+    review_count = Column(Integer, default=0, nullable=False)
+    correct_count = Column(Integer, default=0, nullable=False)
+    ease_factor = Column(Float, default=2.5, nullable=False)
+    interval_days = Column(Integer, default=0, nullable=False)
+    due_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    last_reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    streak_current = Column(Integer, default=0, nullable=False)
+    streak_best = Column(Integer, default=0, nullable=False)
 
 
 def ensure_schema() -> None:
@@ -62,11 +71,44 @@ def ensure_schema() -> None:
                 connection.execute(text("ALTER TABLE flashcards ADD COLUMN user_id VARCHAR"))
             if "collection_id" not in flashcard_columns:
                 connection.execute(text("ALTER TABLE flashcards ADD COLUMN collection_id INTEGER"))
+            if "review_count" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN review_count INTEGER"))
+            if "correct_count" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN correct_count INTEGER"))
+            if "ease_factor" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN ease_factor FLOAT"))
+            if "interval_days" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN interval_days INTEGER"))
+            if "due_at" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN due_at TIMESTAMP"))
+            if "last_reviewed_at" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN last_reviewed_at TIMESTAMP"))
+            if "streak_current" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN streak_current INTEGER"))
+            if "streak_best" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN streak_best INTEGER"))
+
+            connection.execute(
+                text(
+                    """
+                    UPDATE flashcards
+                    SET
+                        review_count = COALESCE(review_count, 0),
+                        correct_count = COALESCE(correct_count, 0),
+                        ease_factor = COALESCE(ease_factor, 2.5),
+                        interval_days = COALESCE(interval_days, 0),
+                        due_at = COALESCE(due_at, CURRENT_TIMESTAMP),
+                        streak_current = COALESCE(streak_current, 0),
+                        streak_best = COALESCE(streak_best, 0)
+                    """
+                )
+            )
 
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_flashcards_user_id ON flashcards (user_id)"))
             connection.execute(
                 text("CREATE INDEX IF NOT EXISTS ix_flashcards_collection_id ON flashcards (collection_id)")
             )
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_flashcards_due_at ON flashcards (due_at)"))
 
         if "collections" in table_names:
             collection_columns = {column["name"] for column in inspector.get_columns("collections")}
@@ -182,6 +224,10 @@ class CollectionSchema(BaseModel):
     color: Optional[str] = None
 
 
+class CardReviewSchema(BaseModel):
+    rating: str
+
+
 def normalize_collection_color(color: Optional[str]) -> str:
     if not color:
         return DEFAULT_COLLECTION_COLOR
@@ -201,6 +247,104 @@ def get_owned_collection(collection_id: int, user_id: str, db: Session) -> Colle
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found or access denied")
     return collection
+
+
+def get_owned_card(card_id: int, user_id: str, db: Session) -> CardDB:
+    card = db.query(CardDB).filter(CardDB.id == card_id, CardDB.user_id == user_id).first()
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found or access denied")
+    return card
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def as_non_negative_int(value, fallback: int = 0) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def as_float(value, fallback: float = 2.5) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def serialize_card(card: CardDB) -> dict:
+    return {
+        "id": card.id,
+        "user_id": card.user_id,
+        "question": card.question,
+        "answer": card.answer,
+        "collection_id": card.collection_id,
+        "review_count": as_non_negative_int(card.review_count),
+        "correct_count": as_non_negative_int(card.correct_count),
+        "ease_factor": round(as_float(card.ease_factor), 2),
+        "interval_days": as_non_negative_int(card.interval_days),
+        "due_at": card.due_at.isoformat() if card.due_at else None,
+        "last_reviewed_at": card.last_reviewed_at.isoformat() if card.last_reviewed_at else None,
+        "streak_current": as_non_negative_int(card.streak_current),
+        "streak_best": as_non_negative_int(card.streak_best),
+    }
+
+
+def apply_card_review(card: CardDB, rating: str) -> dict:
+    normalized_rating = rating.strip().lower()
+    if normalized_rating not in {"again", "hard", "good", "easy"}:
+        raise HTTPException(status_code=400, detail="Rating must be one of: again, hard, good, easy")
+
+    now = utc_now()
+    review_count = as_non_negative_int(card.review_count) + 1
+    correct_count = as_non_negative_int(card.correct_count)
+    ease_factor = max(1.3, as_float(card.ease_factor))
+    interval_days = as_non_negative_int(card.interval_days)
+    streak_current = as_non_negative_int(card.streak_current)
+    streak_best = as_non_negative_int(card.streak_best)
+
+    if normalized_rating == "again":
+        interval_days = 0
+        ease_factor = max(1.3, ease_factor - 0.2)
+        streak_current = 0
+        due_at = now + timedelta(minutes=10)
+    elif normalized_rating == "hard":
+        interval_days = 1 if interval_days <= 1 else max(1, round(interval_days * 1.2))
+        ease_factor = max(1.3, ease_factor - 0.15)
+        streak_current += 1
+        correct_count += 1
+        due_at = now + timedelta(days=interval_days)
+    elif normalized_rating == "good":
+        growth_base = interval_days if interval_days > 0 else 1
+        interval_days = max(1, round(growth_base * ease_factor))
+        ease_factor = min(3.0, ease_factor + 0.05)
+        streak_current += 1
+        correct_count += 1
+        due_at = now + timedelta(days=interval_days)
+    else:
+        growth_base = interval_days if interval_days > 0 else 2
+        interval_days = max(2, round(growth_base * (ease_factor + 0.3)))
+        ease_factor = min(3.2, ease_factor + 0.1)
+        streak_current += 1
+        correct_count += 1
+        due_at = now + timedelta(days=interval_days)
+
+    card.review_count = review_count
+    card.correct_count = correct_count
+    card.ease_factor = round(ease_factor, 2)
+    card.interval_days = interval_days
+    card.last_reviewed_at = now
+    card.due_at = due_at
+    card.streak_current = streak_current
+    card.streak_best = max(streak_best, streak_current)
+
+    return {
+        "rating": normalized_rating,
+        "next_due_at": due_at.isoformat(),
+        "interval_days": interval_days,
+    }
 
 
 # ==========================================
@@ -331,11 +475,13 @@ def get_cards_for_collection(
 ):
     get_owned_collection(collection_id, user_id, db)
 
-    return (
+    cards = (
         db.query(CardDB)
         .filter(CardDB.user_id == user_id, CardDB.collection_id == collection_id)
+        .order_by(CardDB.id.asc())
         .all()
     )
+    return [serialize_card(card) for card in cards]
 
 
 @app.get("/cards")
@@ -350,7 +496,8 @@ def get_cards(
         get_owned_collection(collection_id, user_id, db)
         cards_query = cards_query.filter(CardDB.collection_id == collection_id)
 
-    return cards_query.all()
+    cards = cards_query.order_by(CardDB.id.asc()).all()
+    return [serialize_card(card) for card in cards]
 
 
 @app.post("/cards")
@@ -373,6 +520,14 @@ def create_card(
         answer=answer,
         user_id=user_id,
         collection_id=card.collection_id,
+        review_count=0,
+        correct_count=0,
+        ease_factor=2.5,
+        interval_days=0,
+        due_at=utc_now(),
+        last_reviewed_at=None,
+        streak_current=0,
+        streak_best=0,
     )
     db.add(new_card)
     db.commit()
@@ -382,9 +537,7 @@ def create_card(
 
 @app.delete("/cards/{card_id}")
 def delete_card(card_id: int, user_id: str = Depends(get_current_user), db: Session = Depends(get_db)):
-    card = db.query(CardDB).filter(CardDB.id == card_id, CardDB.user_id == user_id).first()
-    if not card:
-        raise HTTPException(status_code=404, detail="Card not found or access denied")
+    card = get_owned_card(card_id, user_id, db)
 
     db.delete(card)
     db.commit()
@@ -398,9 +551,7 @@ def update_card(
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    db_card = db.query(CardDB).filter(CardDB.id == card_id, CardDB.user_id == user_id).first()
-    if not db_card:
-        raise HTTPException(status_code=404, detail="Card not found or access denied")
+    db_card = get_owned_card(card_id, user_id, db)
 
     question = card_data.question.strip()
     answer = card_data.answer.strip()
@@ -415,3 +566,21 @@ def update_card(
     db_card.collection_id = card_data.collection_id
     db.commit()
     return {"message": "Updated"}
+
+
+@app.post("/cards/{card_id}/review")
+def review_card(
+    card_id: int,
+    review: CardReviewSchema,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    db_card = get_owned_card(card_id, user_id, db)
+    result = apply_card_review(db_card, review.rating)
+    db.commit()
+    db.refresh(db_card)
+    return {
+        "message": "Review recorded",
+        "result": result,
+        "card": serialize_card(db_card),
+    }

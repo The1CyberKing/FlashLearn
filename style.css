@@ -401,6 +401,110 @@ body::after {
     text-align: center;
 }
 
+.study-page-link {
+    display: block;
+    width: fit-content;
+    margin: 0 auto 16px;
+    text-decoration: none;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    padding: 10px 18px;
+    font-size: 0.94rem;
+    font-weight: 700;
+    color: #f8fbff;
+    background: linear-gradient(160deg, #155a2a, #124720);
+    box-shadow: 0 10px 22px rgba(18, 71, 32, 0.28);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.study-page-link:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 24px rgba(18, 71, 32, 0.32);
+    filter: saturate(1.05);
+}
+
+.study-page-link:active {
+    transform: translateY(1px);
+    box-shadow: 0 6px 14px rgba(18, 71, 32, 0.22);
+}
+
+.progress-dashboard {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.progress-stat {
+    border-radius: 14px;
+    border: 1px solid rgba(95, 86, 76, 0.2);
+    background: rgba(255, 255, 255, 0.82);
+    padding: 10px 11px;
+}
+
+.progress-stat p {
+    margin: 0;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink-2);
+}
+
+.progress-stat strong {
+    display: block;
+    margin-top: 3px;
+    font-size: 1.2rem;
+    line-height: 1.15;
+}
+
+.progress-stat-wide {
+    grid-column: span 2;
+}
+
+.progress-weak-list {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: #4a4037;
+    font-size: 0.8rem;
+}
+
+.progress-weak-list li {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.study-mode-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(95, 86, 76, 0.2);
+    background: rgba(255, 255, 255, 0.78);
+}
+
+.study-mode-btn {
+    min-width: 220px;
+    background: linear-gradient(160deg, #124f62, #0c4353);
+}
+
+.study-mode-btn.is-due {
+    background: linear-gradient(160deg, #155a2a, #124720);
+}
+
+.study-mode-hint {
+    margin: 0;
+    color: var(--ink-2);
+    font-size: 0.82rem;
+}
+
 .flashcard-row {
     position: relative;
     width: min(560px, 100%);
@@ -504,6 +608,43 @@ button:active {
     align-items: center;
     gap: 12px;
     margin-bottom: 12px;
+}
+
+.review-actions {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 12px;
+}
+
+.review-btn {
+    min-width: 104px;
+    box-shadow: 0 8px 18px rgba(27, 45, 68, 0.2);
+}
+
+.review-again {
+    background: linear-gradient(160deg, #c3533b, #9f3822);
+}
+
+.review-hard {
+    background: linear-gradient(160deg, #b97728, #8f5b16);
+}
+
+.review-good {
+    background: linear-gradient(160deg, #1b7f4e, #15623d);
+}
+
+.review-easy {
+    background: linear-gradient(160deg, #1b6f95, #145679);
+}
+
+.review-btn:disabled,
+.study-mode-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+    box-shadow: none;
+    transform: none;
 }
 
 #card-index {
@@ -798,6 +939,14 @@ button:active {
         min-height: 0;
         max-height: 260px;
     }
+
+    .progress-dashboard {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .progress-stat-wide {
+        grid-column: span 3;
+    }
 }
 
 @media (max-width: 768px) {
@@ -880,6 +1029,28 @@ button:active {
     .controls {
         margin-top: 24px;
         flex-wrap: wrap;
+    }
+
+    .progress-dashboard {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .progress-stat-wide {
+        grid-column: span 2;
+    }
+
+    .study-mode-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .study-mode-btn {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .study-mode-hint {
+        text-align: center;
     }
 
     .modal-dialog {

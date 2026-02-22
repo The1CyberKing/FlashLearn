@@ -1,13 +1,16 @@
 
 * **Website: [FlashLearn](https://poqq123.github.io/FlashLearn/)**
 
-## New Collections Feature
+## New Features
 
 You can now:
 - Create named collections (optionally tagged with a class name)
 - Assign cards to a collection when creating cards
 - Filter the flashcard view by selected collection
 - Fetch cards by collection through dedicated API endpoints
+- Switch between `All Cards` and `Due Cards` study mode
+- Rate each review as `Again`, `Hard`, `Good`, or `Easy`
+- Track learning progress in a dashboard (due now, mastered, accuracy, reviewed today, weak cards)
 
 ## Backend Overview
 
@@ -20,6 +23,14 @@ Main backend file: `/Users/GeneralUse/LinuxHome/FlashcardTest/main.py`
   - `question`
   - `answer`
   - `collection_id` (nullable)
+  - `review_count`
+  - `correct_count`
+  - `ease_factor`
+  - `interval_days`
+  - `due_at`
+  - `last_reviewed_at` (nullable)
+  - `streak_current`
+  - `streak_best`
 - `collections`
   - `id`
   - `user_id`
@@ -30,7 +41,7 @@ Main backend file: `/Users/GeneralUse/LinuxHome/FlashcardTest/main.py`
 
 `main.py` includes `ensure_schema()` which:
 - keeps existing DBs working
-- adds missing `flashcards.user_id` and `flashcards.collection_id` columns when needed
+- adds missing `flashcards` learning columns when needed
 - creates indexes if missing
 
 This avoids dropping tables for existing deployments.
@@ -96,21 +107,41 @@ All endpoints below require a Supabase bearer token in `Authorization` header.
 - `DELETE /cards/{card_id}`
   - Deletes owned card only.
 
+- `POST /cards/{card_id}/review`
+  - Body:
+    ```json
+    {
+      "rating": "good"
+    }
+    ```
+  - Allowed ratings: `again`, `hard`, `good`, `easy`
+  - Updates review stats and schedules the next due time for that card.
+
 ## Frontend Changes
 
 Updated files:
 - `/Users/GeneralUse/LinuxHome/FlashcardTest/index.html`
 - `/Users/GeneralUse/LinuxHome/FlashcardTest/script.js`
 - `/Users/GeneralUse/LinuxHome/FlashcardTest/style.css`
+- `/Users/GeneralUse/LinuxHome/FlashcardTest/quiz.html`
+- `/Users/GeneralUse/LinuxHome/FlashcardTest/quiz.js`
+- `/Users/GeneralUse/LinuxHome/FlashcardTest/quiz.css`
 
 Added UI:
 - Collection dropdown (`All Collections` + user collections)
 - `New Collection` button
 - Active collection label
+- `Study Mode` button on the main page that opens a dedicated quiz webpage
+- Quiz webpage with `Due Cards` / `All Cards` mode toggle
+- Quiz webpage pop-quiz input (type answer and check)
+- Quiz webpage progress dashboard for total, due, mastered, accuracy, and reviewed today
 
 Behavior:
 - Cards are fetched according to the selected collection.
 - New cards are assigned to selected collection (or unassigned when `All Collections` is selected).
+- Quiz checks typed answers against flashcard answers (case/punctuation tolerant).
+- Correct first-try answers are logged as strong reviews and can move cards into mastered status.
+- Incorrect answers are logged and reduce overall accuracy.
 
 ## Deployment Notes
 
@@ -151,5 +182,3 @@ Then open `index.html` through your static host or local web server.
 - Generate practice quizzes based on collections
 - Add collection sharing via link between users (requires more complex permissions)
 - Convert login buttons to a single profile button for logging in and out, and showing user info
-
-

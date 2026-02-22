@@ -1,0 +1,598 @@
+const API_URL = "https://flashcardapp-pwic.onrender.com";
+const REVIEW_RATINGS = ["again", "hard", "good", "easy"];
+
+let collections = [];
+let allCards = [];
+let filteredCards = [];
+let activeCollection = "all";
+let studyMode = "due";
+let currentIndex = 0;
+const quizAttemptsByCard = new Map();
+
+const collectionSelect = document.getElementById("quiz-collection-select");
+const modeToggleButton = document.getElementById("quiz-mode-toggle");
+const refreshButton = document.getElementById("refresh-cards-btn");
+const activeScopeText = document.getElementById("quiz-active-scope");
+
+const totalCardsElement = document.getElementById("quiz-total");
+const dueCardsElement = document.getElementById("quiz-due");
+const masteredCardsElement = document.getElementById("quiz-mastered");
+const accuracyElement = document.getElementById("quiz-accuracy");
+const reviewedTodayElement = document.getElementById("quiz-reviewed-today");
+
+const questionElement = document.getElementById("quiz-question");
+const answerWrapElement = document.getElementById("quiz-answer-wrap");
+const answerElement = document.getElementById("quiz-answer");
+const answerForm = document.getElementById("quiz-answer-form");
+const answerInput = document.getElementById("quiz-answer-input");
+const revealButton = document.getElementById("reveal-answer-btn");
+const cardIndexElement = document.getElementById("quiz-card-index");
+const dueInfoElement = document.getElementById("quiz-due-info");
+const prevButton = document.getElementById("quiz-prev-btn");
+const nextButton = document.getElementById("quiz-next-btn");
+const statusElement = document.getElementById("quiz-status");
+
+document.addEventListener("DOMContentLoaded", initializeQuizPage);
+
+async function waitForAuthBootstrap() {
+    const authReady = window.authReady;
+    if (authReady && typeof authReady.then === "function") {
+        try {
+            await authReady;
+        } catch (error) {
+            console.error("Auth bootstrap failed:", error);
+        }
+    }
+}
+
+function getHeaders() {
+    const token = localStorage.getItem("userToken");
+    return {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+    };
+}
+
+function hasValidToken() {
+    const token = localStorage.getItem("userToken");
+    return Boolean(token && token.startsWith("ey"));
+}
+
+function toNonNegativeInteger(value, fallback = 0) {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+    return parsed;
+}
+
+function toNumber(value, fallback = 0) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return parsed;
+}
+
+function toDateOrNull(value) {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed;
+}
+
+function isSameLocalDay(dateA, dateB) {
+    return dateA.getFullYear() === dateB.getFullYear()
+        && dateA.getMonth() === dateB.getMonth()
+        && dateA.getDate() === dateB.getDate();
+}
+
+function isCardDue(card, referenceDate = new Date()) {
+    const dueDate = toDateOrNull(card?.due_at);
+    if (!dueDate) return true;
+    return dueDate.getTime() <= referenceDate.getTime();
+}
+
+function getCardAccuracy(card) {
+    const reviews = toNonNegativeInteger(card?.review_count, 0);
+    if (reviews <= 0) return null;
+    const correct = toNonNegativeInteger(card?.correct_count, 0);
+    return correct / reviews;
+}
+
+function isCardMastered(card) {
+    const accuracy = getCardAccuracy(card);
+    return Boolean(
+        accuracy !== null
+        && accuracy >= 0.85
+        && toNonNegativeInteger(card?.review_count, 0) >= 1
+        && toNonNegativeInteger(card?.interval_days, 0) >= 2
+    );
+}
+
+function normalizeCardPayload(card) {
+    return {
+        ...card,
+        review_count: toNonNegativeInteger(card?.review_count, 0),
+        correct_count: toNonNegativeInteger(card?.correct_count, 0),
+        ease_factor: Math.max(1.3, toNumber(card?.ease_factor, 2.5)),
+        interval_days: toNonNegativeInteger(card?.interval_days, 0),
+        due_at: typeof card?.due_at === "string" && card.due_at.trim() ? card.due_at : null,
+        last_reviewed_at: typeof card?.last_reviewed_at === "string" && card.last_reviewed_at.trim()
+            ? card.last_reviewed_at
+            : null,
+        streak_current: toNonNegativeInteger(card?.streak_current, 0),
+        streak_best: toNonNegativeInteger(card?.streak_best, 0),
+    };
+}
+
+function getCollectionDisplayName(collection) {
+    if (!collection) return "All Collections";
+    if (collection.class_name) return `${collection.name} (${collection.class_name})`;
+    return collection.name;
+}
+
+function getScopedCards() {
+    if (activeCollection === "all") {
+        return [...allCards];
+    }
+    return allCards.filter((card) => String(card.collection_id) === String(activeCollection));
+}
+
+function getVisibleCards() {
+    const scopedCards = getScopedCards();
+    if (studyMode !== "due") return scopedCards;
+
+    return scopedCards
+        .filter((card) => isCardDue(card))
+        .sort((left, right) => {
+            const leftDue = toDateOrNull(left?.due_at);
+            const rightDue = toDateOrNull(right?.due_at);
+            if (!leftDue && !rightDue) return 0;
+            if (!leftDue) return -1;
+            if (!rightDue) return 1;
+            return leftDue.getTime() - rightDue.getTime();
+        });
+}
+
+function formatDueInfo(card) {
+    if (!card) return "No due date";
+    const dueDate = toDateOrNull(card.due_at);
+    if (!dueDate) return "Due now";
+
+    const now = new Date();
+    if (dueDate.getTime() <= now.getTime()) {
+        return "Due now";
+    }
+    if (isSameLocalDay(dueDate, now)) {
+        return `Due today at ${dueDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+    }
+    return `Due ${dueDate.toLocaleDateString([], { month: "short", day: "numeric" })}`;
+}
+
+function setStatus(message, tone = "info") {
+    if (!statusElement) return;
+    statusElement.textContent = message || "";
+    statusElement.classList.remove("is-error", "is-success");
+    if (tone === "error") statusElement.classList.add("is-error");
+    if (tone === "success") statusElement.classList.add("is-success");
+}
+
+function renderCollectionOptions() {
+    if (!collectionSelect) return;
+    collectionSelect.innerHTML = "";
+
+    const allOption = document.createElement("option");
+    allOption.value = "all";
+    allOption.textContent = "All Collections";
+    collectionSelect.appendChild(allOption);
+
+    for (const collection of collections) {
+        const option = document.createElement("option");
+        option.value = String(collection.id);
+        option.textContent = getCollectionDisplayName(collection);
+        collectionSelect.appendChild(option);
+    }
+
+    const exists = Array.from(collectionSelect.options).some((option) => option.value === String(activeCollection));
+    if (!exists) activeCollection = "all";
+    collectionSelect.value = activeCollection;
+}
+
+function updateDashboard() {
+    const scopedCards = getScopedCards();
+    const totalCards = scopedCards.length;
+    const dueCards = scopedCards.filter((card) => isCardDue(card)).length;
+    const masteredCards = scopedCards.filter((card) => isCardMastered(card)).length;
+    const totalReviews = scopedCards.reduce((sum, card) => sum + toNonNegativeInteger(card.review_count, 0), 0);
+    const totalCorrect = scopedCards.reduce((sum, card) => sum + toNonNegativeInteger(card.correct_count, 0), 0);
+    const reviewedToday = scopedCards.filter((card) => {
+        const reviewedAt = toDateOrNull(card.last_reviewed_at);
+        return reviewedAt ? isSameLocalDay(reviewedAt, new Date()) : false;
+    }).length;
+    const accuracy = totalReviews > 0 ? Math.round((totalCorrect / totalReviews) * 100) : 0;
+
+    if (totalCardsElement) totalCardsElement.textContent = String(totalCards);
+    if (dueCardsElement) dueCardsElement.textContent = String(dueCards);
+    if (masteredCardsElement) masteredCardsElement.textContent = String(masteredCards);
+    if (accuracyElement) accuracyElement.textContent = `${accuracy}%`;
+    if (reviewedTodayElement) reviewedTodayElement.textContent = String(reviewedToday);
+}
+
+function updateModeUI() {
+    if (modeToggleButton) {
+        modeToggleButton.textContent = studyMode === "due" ? "Mode: Due Cards" : "Mode: All Cards";
+    }
+
+    const selectedCollection = activeCollection === "all"
+        ? null
+        : collections.find((collection) => String(collection.id) === String(activeCollection)) || null;
+    const modeLabel = studyMode === "due" ? "Due Cards" : "All Cards";
+    if (activeScopeText) {
+        activeScopeText.textContent = `Scope: ${getCollectionDisplayName(selectedCollection)} · ${modeLabel}`;
+    }
+}
+
+function updateInteractionState() {
+    const canInteract = hasValidToken() && filteredCards.length > 0;
+    if (answerInput) answerInput.disabled = !canInteract;
+    if (revealButton) revealButton.disabled = !canInteract;
+    if (prevButton) prevButton.disabled = !canInteract || filteredCards.length <= 1;
+    if (nextButton) nextButton.disabled = !canInteract || filteredCards.length <= 1;
+
+    if (answerForm) {
+        const submitButton = answerForm.querySelector("button[type='submit']");
+        if (submitButton) submitButton.disabled = !canInteract;
+    }
+}
+
+function resetAnswerView() {
+    if (answerWrapElement) answerWrapElement.classList.add("is-hidden");
+    if (revealButton) revealButton.textContent = "Show Correct Answer";
+    if (answerInput) answerInput.value = "";
+}
+
+function renderCard() {
+    if (!hasValidToken()) {
+        if (questionElement) questionElement.textContent = "Please log in to start Quiz Mode.";
+        if (answerElement) answerElement.textContent = "Correct answer will appear here.";
+        if (cardIndexElement) cardIndexElement.textContent = "0 / 0";
+        if (dueInfoElement) dueInfoElement.textContent = "No due date";
+        resetAnswerView();
+        updateInteractionState();
+        return;
+    }
+
+    if (!filteredCards.length) {
+        if (questionElement) {
+            questionElement.textContent = studyMode === "due"
+                ? "No due cards right now."
+                : "No cards in this scope yet.";
+        }
+        if (answerElement) {
+            answerElement.textContent = studyMode === "due"
+                ? "Switch to All Cards or come back later."
+                : "Add cards from the main page and refresh.";
+        }
+        if (cardIndexElement) cardIndexElement.textContent = "0 / 0";
+        if (dueInfoElement) dueInfoElement.textContent = "No due date";
+        resetAnswerView();
+        updateInteractionState();
+        return;
+    }
+
+    const card = filteredCards[currentIndex];
+    if (questionElement) questionElement.textContent = card.question || "Untitled card";
+    if (answerElement) answerElement.textContent = card.answer || "No answer";
+    if (cardIndexElement) cardIndexElement.textContent = `${currentIndex + 1} / ${filteredCards.length}`;
+    if (dueInfoElement) dueInfoElement.textContent = formatDueInfo(card);
+    resetAnswerView();
+    updateInteractionState();
+}
+
+function applyFilters({ preferredCardId = null, resetIndex = false } = {}) {
+    filteredCards = getVisibleCards();
+
+    if (resetIndex) currentIndex = 0;
+
+    if (preferredCardId !== null) {
+        const preferredIndex = filteredCards.findIndex((card) => String(card.id) === String(preferredCardId));
+        currentIndex = preferredIndex >= 0 ? preferredIndex : 0;
+    }
+
+    if (currentIndex >= filteredCards.length) {
+        currentIndex = Math.max(0, filteredCards.length - 1);
+    }
+    if (currentIndex < 0 || !Number.isInteger(currentIndex)) {
+        currentIndex = 0;
+    }
+
+    updateModeUI();
+    updateDashboard();
+    renderCard();
+}
+
+function normalizeAnswerText(value) {
+    return String(value || "")
+        .toLowerCase()
+        .replace(/[\W_]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function answersMatch(userAnswer, expectedAnswer) {
+    const normalizedUser = normalizeAnswerText(userAnswer);
+    if (!normalizedUser) return false;
+
+    const variants = String(expectedAnswer || "")
+        .split("|")
+        .map((variant) => normalizeAnswerText(variant))
+        .filter(Boolean);
+
+    if (!variants.length) return false;
+    return variants.includes(normalizedUser);
+}
+
+function toggleAnswerVisibility() {
+    if (!answerWrapElement || revealButton?.disabled) return;
+    const isHidden = answerWrapElement.classList.contains("is-hidden");
+    answerWrapElement.classList.toggle("is-hidden", !isHidden);
+    if (revealButton) {
+        revealButton.textContent = isHidden ? "Hide Correct Answer" : "Show Correct Answer";
+    }
+}
+
+function nextCard() {
+    if (!filteredCards.length) return;
+    currentIndex = (currentIndex + 1) % filteredCards.length;
+    renderCard();
+    setStatus("");
+    answerInput?.focus();
+}
+
+function prevCard() {
+    if (!filteredCards.length) return;
+    currentIndex = (currentIndex - 1 + filteredCards.length) % filteredCards.length;
+    renderCard();
+    setStatus("");
+    answerInput?.focus();
+}
+
+async function fetchCollections() {
+    if (!hasValidToken()) {
+        collections = [];
+        activeCollection = "all";
+        renderCollectionOptions();
+        applyFilters({ resetIndex: true });
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/collections`, {
+            method: "GET",
+            headers: getHeaders(),
+        });
+
+        if (response.status === 401) {
+            collections = [];
+            activeCollection = "all";
+            renderCollectionOptions();
+            applyFilters({ resetIndex: true });
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(`Collection request failed (HTTP ${response.status}).`);
+        }
+
+        const payload = await response.json();
+        collections = Array.isArray(payload) ? payload : [];
+        renderCollectionOptions();
+    } catch (error) {
+        console.error("Failed to load collections:", error);
+        setStatus("Could not load collections.", "error");
+        collections = [];
+        activeCollection = "all";
+        renderCollectionOptions();
+    }
+}
+
+async function fetchCards() {
+    if (!hasValidToken()) {
+        allCards = [];
+        applyFilters({ resetIndex: true });
+        return;
+    }
+
+    try {
+        const previousCardId = filteredCards[currentIndex]?.id ?? null;
+        const response = await fetch(`${API_URL}/cards`, {
+            method: "GET",
+            headers: getHeaders(),
+        });
+
+        if (response.status === 401) {
+            allCards = [];
+            applyFilters({ resetIndex: true });
+            setStatus("Session expired. Please log in again.", "error");
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(`Card request failed (HTTP ${response.status}).`);
+        }
+
+        const payload = await response.json();
+        allCards = Array.isArray(payload) ? payload.map(normalizeCardPayload) : [];
+        applyFilters({ preferredCardId: previousCardId, resetIndex: false });
+    } catch (error) {
+        console.error("Failed to load cards:", error);
+        setStatus("Could not load cards.", "error");
+        allCards = [];
+        applyFilters({ resetIndex: true });
+    }
+}
+
+async function refreshData() {
+    await fetchCollections();
+    await fetchCards();
+}
+
+async function submitReview(cardId, rating) {
+    if (!REVIEW_RATINGS.includes(rating)) {
+        throw new Error("Unsupported rating value.");
+    }
+
+    const response = await fetch(`${API_URL}/cards/${cardId}/review`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ rating }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+
+    if (response.status === 401) {
+        throw new Error("Session expired. Please log in again.");
+    }
+
+    if (!response.ok) {
+        throw new Error(payload.detail || `Review failed (HTTP ${response.status}).`);
+    }
+
+    const updatedCard = normalizeCardPayload(payload?.card || {});
+    allCards = allCards.map((card) => (
+        String(card.id) === String(cardId) ? updatedCard : card
+    ));
+    return updatedCard;
+}
+
+async function handleAnswerSubmit(event) {
+    event.preventDefault();
+    if (!hasValidToken()) {
+        setStatus("Please log in to take the quiz.", "error");
+        return;
+    }
+    if (!filteredCards.length) return;
+
+    const userAnswer = String(answerInput?.value || "").trim();
+    if (!userAnswer) {
+        setStatus("Type an answer before checking.", "error");
+        return;
+    }
+
+    const currentCard = filteredCards[currentIndex];
+    const expectedAnswer = currentCard.answer || "";
+    const previousAttempts = quizAttemptsByCard.get(currentCard.id) || 0;
+    const isCorrect = answersMatch(userAnswer, expectedAnswer);
+
+    try {
+        if (isCorrect) {
+            const isFirstTry = previousAttempts === 0;
+            const rating = isFirstTry ? "easy" : "hard";
+            const nextCardId = filteredCards.length > 1
+                ? filteredCards[(currentIndex + 1) % filteredCards.length].id
+                : null;
+
+            await submitReview(currentCard.id, rating);
+            quizAttemptsByCard.set(currentCard.id, previousAttempts + 1);
+
+            applyFilters({ preferredCardId: nextCardId, resetIndex: false });
+            setStatus(
+                isFirstTry
+                    ? "Correct on first try. Accuracy, reviewed today, and mastered were updated."
+                    : "Correct. Accuracy and reviewed today were updated.",
+                "success"
+            );
+            answerInput?.focus();
+            return;
+        }
+
+        await submitReview(currentCard.id, "again");
+        quizAttemptsByCard.set(currentCard.id, previousAttempts + 1);
+        updateDashboard();
+
+        if (answerWrapElement) answerWrapElement.classList.remove("is-hidden");
+        if (revealButton) revealButton.textContent = "Hide Correct Answer";
+        setStatus("Incorrect. This was counted as a miss and accuracy was updated.", "error");
+        answerInput?.focus();
+    } catch (error) {
+        console.error("Quiz submission failed:", error);
+        setStatus(error?.message || "Could not process this answer.", "error");
+    }
+}
+
+function setupEvents() {
+    if (collectionSelect) {
+        collectionSelect.addEventListener("change", () => {
+            activeCollection = collectionSelect.value || "all";
+            applyFilters({ resetIndex: true });
+            setStatus("");
+            answerInput?.focus();
+        });
+    }
+
+    if (modeToggleButton) {
+        modeToggleButton.addEventListener("click", () => {
+            studyMode = studyMode === "due" ? "all" : "due";
+            applyFilters({ resetIndex: true });
+            setStatus("");
+            answerInput?.focus();
+        });
+    }
+
+    if (refreshButton) {
+        refreshButton.addEventListener("click", refreshData);
+    }
+
+    if (answerForm) {
+        answerForm.addEventListener("submit", handleAnswerSubmit);
+    }
+
+    if (revealButton) {
+        revealButton.addEventListener("click", toggleAnswerVisibility);
+    }
+
+    if (nextButton) nextButton.addEventListener("click", nextCard);
+    if (prevButton) prevButton.addEventListener("click", prevCard);
+
+    document.addEventListener("keydown", (event) => {
+        const activeTag = document.activeElement?.tagName?.toLowerCase();
+        const isTyping = activeTag === "input" || activeTag === "textarea" || document.activeElement?.isContentEditable;
+
+        if (event.key === "ArrowRight") {
+            if (isTyping) return;
+            event.preventDefault();
+            nextCard();
+            return;
+        }
+
+        if (event.key === "ArrowLeft") {
+            if (isTyping) return;
+            event.preventDefault();
+            prevCard();
+            return;
+        }
+
+        if (event.key === " " || event.code === "Space") {
+            if (isTyping) return;
+            event.preventDefault();
+            toggleAnswerVisibility();
+        }
+    });
+}
+
+function applyQueryParams() {
+    const params = new URLSearchParams(window.location.search);
+    const collection = params.get("collection");
+    const mode = params.get("mode");
+
+    if (collection) activeCollection = collection;
+    if (mode === "all" || mode === "due") studyMode = mode;
+}
+
+async function initializeQuizPage() {
+    await waitForAuthBootstrap();
+    applyQueryParams();
+    setupEvents();
+    updateModeUI();
+    updateDashboard();
+    renderCard();
+    await refreshData();
+    answerInput?.focus();
+}
