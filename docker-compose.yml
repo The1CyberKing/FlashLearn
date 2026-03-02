@@ -1,17 +1,22 @@
 version: '3.8'
+
 services:
   api:
-    build: .
+    # 1. Pulls your pre-built "brain" from the cloud
+    image: the1cyberking/flashlearn-api:v1
     ports:
       - "8000:8000"
     env_file:
       - .env
-    
+    restart: always
+
   web:
+    # 2. Standard high-speed web server
     image: nginx:alpine
     ports:
       - "8080:80"
     volumes:
+      # 3. Mounts the folder containing your HTML/JS files
       - ./:/usr/share/nginx/html
     depends_on:
       - api
