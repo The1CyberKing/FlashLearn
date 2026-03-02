@@ -1,6 +1,5 @@
 // script.js
-// PASTE YOUR CODESPACE URL HERE (No trailing slash)
-const API_URL = "https://flashcardapp-pwic.onrender.com";
+const API_URL = window.APP_CONFIG.API_URL;
 const DEFAULT_COLLECTION_COLOR = "#0F4C5C";
 const REVIEW_RATINGS = ["again", "hard", "good", "easy"];
 

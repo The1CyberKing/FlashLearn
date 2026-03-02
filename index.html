@@ -1,11 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlashLearn</title>
+    
+    <script src="config.js"></script>
+
     <script type="module">
     import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
-    const SUPABASE_URL = "https://sfxtsemiitbruxmdurva.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmeHRzZW1paXRicnV4bWR1cnZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMjE3NjcsImV4cCI6MjA4NTg5Nzc2N30.M4ErTSvcEIezdt72o-DBYFONe5l9UWWoQYGy2-HkaeA";
+    // Use the config variables here
+    const supabase = createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_ANON_KEY);
+    
     const AVATAR_PRESET_KEY = "flashlearnAvatarPreset";
     const AVATAR_PRESETS = {
         fox: { emoji: "🦊", background: "linear-gradient(160deg, #ffd7ad, #f1a35f)" },
@@ -14,155 +21,99 @@
         whale: { emoji: "🐋", background: "linear-gradient(160deg, #c7ebff, #8fc3e7)" },
         cat: { emoji: "🐱", background: "linear-gradient(160deg, #ffe2cf, #f4b28c)" },
     };
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    function setStoredToken(session) {
-        if (session?.access_token) {
-            localStorage.setItem("userToken", session.access_token);
-            return;
-        }
-        localStorage.removeItem("userToken");
-    }
-
-    function getDisplayName(user) {
-        const metadata = user?.user_metadata || {};
-        return (
-            metadata.full_name ||
-            metadata.name ||
-            user?.email ||
-            "Learner"
-        );
-    }
-
-    function getInitials(displayName) {
-        const parts = (displayName || "").trim().split(/\s+/).filter(Boolean);
-        if (parts.length === 0) return "FL";
-        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-        return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-    }
-
-    function syncHeaderAvatar(user) {
-        const avatarBadge = document.getElementById("header-profile-avatar");
-        if (!avatarBadge) return;
-
-        avatarBadge.classList.remove("has-photo", "avatar-custom");
-        avatarBadge.style.background = "";
-        avatarBadge.style.backgroundImage = "";
-
-        const selectedPreset = localStorage.getItem(AVATAR_PRESET_KEY) || "google";
-        if (selectedPreset !== "google" && AVATAR_PRESETS[selectedPreset]) {
-            const preset = AVATAR_PRESETS[selectedPreset];
-            avatarBadge.classList.add("avatar-custom");
-            avatarBadge.textContent = preset.emoji;
-            avatarBadge.style.background = preset.background;
+    function updateProfileButton(user) {
+        const btn = document.getElementById("profile-menu-trigger");
+        if (!btn) return;
+        if (!user) {
+            btn.hidden = true;
             return;
         }
 
-        const displayName = getDisplayName(user);
-        const metadata = user?.user_metadata || {};
-        const avatarUrl = metadata.avatar_url || metadata.picture || "";
+        btn.hidden = false;
+        const avatarSpan = btn.querySelector(".profile-avatar");
+        if (!avatarSpan) return;
+
+        const presetId = localStorage.getItem(AVATAR_PRESET_KEY);
+        const preset = AVATAR_PRESETS[presetId];
+        
+        if (preset) {
+            avatarSpan.textContent = preset.emoji;
+            avatarSpan.style.background = preset.background;
+            avatarSpan.classList.add("avatar-custom");
+            avatarSpan.classList.remove("has-photo");
+            avatarSpan.style.backgroundImage = "none";
+            return;
+        }
+
+        const metadata = user.user_metadata || {};
+        const avatarUrl = metadata.avatar_url || metadata.picture;
 
         if (avatarUrl) {
-            const safeUrl = avatarUrl.replace(/"/g, "%22");
-            avatarBadge.classList.add("has-photo");
-            avatarBadge.textContent = "";
-            avatarBadge.style.backgroundImage = `url("${safeUrl}")`;
+            avatarSpan.style.backgroundImage = `url("${avatarUrl}")`;
+            avatarSpan.classList.add("has-photo");
+            avatarSpan.classList.remove("avatar-custom");
+            avatarSpan.textContent = "U";
+            avatarSpan.style.background = `url("${avatarUrl}") center/cover no-repeat`;
             return;
         }
 
-        avatarBadge.textContent = getInitials(displayName);
+        const name = metadata.full_name || metadata.name || metadata.given_name || user.email || "L";
+        avatarSpan.textContent = name.charAt(0).toUpperCase();
+        avatarSpan.style.background = "linear-gradient(160deg, #dbe8ff, #c0d8e8)";
+        avatarSpan.style.backgroundImage = "none";
+        avatarSpan.classList.remove("has-photo", "avatar-custom");
     }
 
-    function readTokensFromHash() {
-        const hash = window.location.hash.startsWith("#")
-            ? window.location.hash.slice(1)
-            : window.location.hash;
-        if (!hash) return null;
-
-        const params = new URLSearchParams(hash);
-        const accessToken = params.get("access_token");
-        const refreshToken = params.get("refresh_token");
-        if (!accessToken || !refreshToken) return null;
-        return { accessToken, refreshToken };
-    }
-
-    function clearHash() {
-        const cleanUrl = `${window.location.pathname}${window.location.search}`;
-        window.history.replaceState({}, document.title, cleanUrl);
+    function setStoredToken(session) {
+        const loginBtn = document.getElementById("login-btn");
+        
+        if (session?.access_token) {
+            localStorage.setItem("userToken", session.access_token);
+            if (loginBtn) loginBtn.hidden = true;
+            updateProfileButton(session.user);
+            return;
+        }
+        
+        localStorage.removeItem("userToken");
+        if (loginBtn) loginBtn.hidden = false;
+        updateProfileButton(null);
     }
 
     async function syncSession() {
-        const callbackTokens = readTokensFromHash();
-        if (callbackTokens) {
-            try {
-                await supabase.auth.setSession({
-                    access_token: callbackTokens.accessToken,
-                    refresh_token: callbackTokens.refreshToken,
-                });
-            } catch (callbackError) {
-                console.error("Failed to hydrate auth callback:", callbackError);
-            } finally {
-                clearHash();
-            }
-        }
-
         const { data, error } = await supabase.auth.getSession();
         if (error) {
             console.error("Failed to read Supabase session:", error);
             localStorage.removeItem("userToken");
+            updateProfileButton(null);
             return;
         }
-
+        
         setStoredToken(data.session);
-        syncHeaderAvatar(data.session?.user || null);
 
-        const shouldShowWelcome = sessionStorage.getItem("showWelcomeAfterAuth") === "1";
-        if (shouldShowWelcome && data.session?.user) {
-            window.pendingWelcomeUserName =
-                data.session.user.user_metadata?.full_name ||
-                data.session.user.user_metadata?.name ||
-                data.session.user.email ||
-                "Learner";
+        if (data.session && sessionStorage.getItem("showWelcomeAfterAuth") === "1") {
+            sessionStorage.removeItem("showWelcomeAfterAuth");
+            const metadata = data.session.user?.user_metadata || {};
+            const dName = metadata.full_name || metadata.name || metadata.given_name || data.session.user?.email?.split("@")[0] || "Learner";
+            window.pendingWelcomeUserName = dName;
         }
-        sessionStorage.removeItem("showWelcomeAfterAuth");
     }
 
     window.authReady = syncSession();
 
     supabase.auth.onAuthStateChange((_event, session) => {
         setStoredToken(session);
-        syncHeaderAvatar(session?.user || null);
     });
-
-    window.login = async () => {
-        sessionStorage.setItem("showWelcomeAfterAuth", "1");
-        const { error } = await supabase.auth.signInWithOAuth({
-            provider: "google",
-            options: {
-                redirectTo: `${window.location.origin}${window.location.pathname}`,
-            },
-        });
-
-        if (error) {
-            console.error(error);
-            alert("Login failed");
-        }
-    };
 
     window.logout = async () => {
         const { error } = await supabase.auth.signOut();
-        if (error) {
-            console.error("Logout failed:", error);
-        }
+        if (error) console.error("Logout failed:", error);
+        
         localStorage.removeItem("userToken");
-        sessionStorage.removeItem("showWelcomeAfterAuth");
-        window.pendingWelcomeUserName = null;
         location.reload();
     };
     </script>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FlashLearn</title>
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -170,34 +121,28 @@
 </head>
 <body>
     <div class="auth-controls">
-        <button
-            id="profile-menu-trigger"
-            class="profile-trigger"
-            type="button"
-            aria-label="Open profile menu"
-            aria-haspopup="true"
-            aria-expanded="false"
-            aria-controls="profile-menu"
-        >
-            <span id="header-profile-avatar" class="profile-avatar" aria-hidden="true">FL</span>
+        <button id="login-btn" type="button" onclick="window.location.href='login.html'" class="profile-trigger" style="padding: 6px 14px; font-weight: 700;">
+            Log In
+        </button>
+        <button id="profile-menu-trigger" class="profile-trigger" type="button" aria-label="Open profile menu" aria-haspopup="true" aria-expanded="false" aria-controls="profile-menu" hidden>
+            <span class="profile-avatar" aria-hidden="true">U</span>
             <svg class="profile-caret" viewBox="0 0 16 16" aria-hidden="true">
                 <path d="M4.22 6.72a.75.75 0 0 1 1.06 0L8 9.44l2.72-2.72a.75.75 0 0 1 1.06 1.06L8.53 11.03a.75.75 0 0 1-1.06 0L4.22 7.78a.75.75 0 0 1 0-1.06z"/>
             </svg>
-            <span class="sr-only">Open profile menu</span>
         </button>
         <div id="profile-menu" class="profile-menu" role="menu" aria-label="Profile menu" hidden>
-            <a class="profile-menu-item" role="menuitem" data-profile-link href="login.html?next=index.html">Profile</a>
+            <a class="profile-menu-item" role="menuitem" data-profile-link href="profile.html">Profile</a>
             <button class="profile-menu-item profile-menu-item-danger" type="button" role="menuitem" onclick="logout()">
                 Log Out
             </button>
         </div>
     </div>
 
-    <div class="container">
+    <main class="container">
         <header class="page-header">
             <p class="eyebrow">FlashLearn</p>
-            <h1>Study Better, With Style</h1>
-            <p class="subhead">Organize cards by class collections and review with a clean, focused workflow.</p>
+            <h1>Study Dashboard</h1>
+            <p class="subhead">Create collections, add flashcards, and review them using spaced repetition.</p>
         </header>
 
         <div class="study-layout">
@@ -206,86 +151,117 @@
                     <div class="sidebar-title-row">
                         <h2>Collections</h2>
                         <div class="sidebar-transfer-icons">
-                            <button id="export-collection-btn" class="transfer-icon-btn" type="button" aria-label="Export selected collection as JSON" title="Export selected collection">
-                                <svg viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="M12 3v9m0 0-3.5-3.5M12 12l3.5-3.5M4.5 12.8V18a1.5 1.5 0 0 0 1.5 1.5h12A1.5 1.5 0 0 0 19.5 18v-5.2" />
-                                </svg>
+                            <button id="import-collection-btn" class="transfer-icon-btn" title="Import Collection" aria-label="Import collection from file">
+                                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                             </button>
-                            <button id="import-collection-btn" class="transfer-icon-btn" type="button" aria-label="Import collection from JSON" title="Import collection">
-                                <svg viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="M12 21v-9m0 0-3.5 3.5M12 12l3.5 3.5M4.5 12.8V6a1.5 1.5 0 0 1 1.5-1.5h12A1.5 1.5 0 0 1 19.5 6v6.8" />
-                                </svg>
+                            <button id="export-collection-btn" class="transfer-icon-btn" title="Export Selected Collection" aria-label="Export currently selected collection">
+                                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
                             </button>
-                            <input id="import-collection-file" type="file" accept="application/json,.json" hidden />
+                            <input type="file" id="import-collection-file" accept=".json" style="display: none;" />
                         </div>
                     </div>
-                    <p>Folders with nested cards</p>
+                    <p>Organize your flashcards.</p>
                 </div>
+
                 <div class="collection-action-icons">
-                    <button class="collection-icon-btn collection-icon-add" onclick="createCollection()" aria-label="Add collection">+</button>
-                    <button id="delete-collection-btn" class="collection-icon-btn collection-icon-delete" onclick="deleteCollection()" aria-label="Delete selected collection">&#10005;</button>
-                    <button id="edit-collection-btn" class="collection-icon-btn collection-icon-edit" onclick="openEditCollectionModal()" aria-label="Edit selected collection">&#9998;</button>
+                    <button type="button" class="collection-icon-btn" title="Add Collection" onclick="openCollectionModal('create')" aria-label="Create new collection">
+                        +
+                    </button>
+                    <button id="edit-collection-btn" type="button" class="collection-icon-btn collection-icon-edit" title="Edit Collection" onclick="openEditCollectionModal()" aria-label="Edit selected collection" disabled>
+                        &#9998;
+                    </button>
+                    <button id="delete-collection-btn" type="button" class="collection-icon-btn collection-icon-delete" title="Delete Collection" onclick="deleteCollection()" aria-label="Delete selected collection" disabled>
+                        &times;
+                    </button>
                 </div>
+
                 <div class="collection-tree-wrap">
-                    <ul id="collection-tree" class="collection-tree">
-                        <li class="collection-tree-empty">No collections yet.</li>
-                    </ul>
+                    <ul id="collection-tree" class="collection-tree" aria-label="Collection Folders"></ul>
                 </div>
-                <select id="collection-select" onchange="onCollectionChange()" class="collection-select-hidden">
-                    <option value="all">All Collections</option>
-                </select>
-                <span id="collection-color-swatch" class="collection-color-swatch" title="Selected collection color"></span>
             </aside>
 
-            <div class="flashcard-container">
-                <p id="active-collection" class="active-collection">Showing: All Collections</p>
-                <a href="quiz.html" class="study-page-link">Study Mode: Open Quiz & Performance</a>
+            <section class="flashcard-container">
+                <h2 id="active-collection" class="active-collection">Showing: All Collections</h2>
+                
+                <div class="study-mode-bar">
+                    <button id="study-mode-toggle" class="study-mode-btn" type="button">Study Mode: All Cards</button>
+                    <p id="study-mode-hint" class="study-mode-hint">Review all cards without scoring.</p>
+                    <a href="quiz.html" class="study-page-link">Pop Quiz Mode</a>
+                </div>
+
+                <div class="progress-dashboard" aria-live="polite">
+                    <div class="progress-stat">
+                        <p>Cards</p>
+                        <strong id="progress-total">0</strong>
+                    </div>
+                    <div class="progress-stat">
+                        <p>Due</p>
+                        <strong id="progress-due">0</strong>
+                    </div>
+                    <div class="progress-stat">
+                        <p>Mastered</p>
+                        <strong id="progress-mastered">0</strong>
+                    </div>
+                    <div class="progress-stat">
+                        <p>Accuracy</p>
+                        <strong id="progress-accuracy">0%</strong>
+                    </div>
+                    <div class="progress-stat progress-stat-wide">
+                        <p>Weakest (Need Review)</p>
+                        <ul id="progress-weak-list" class="progress-weak-list">
+                            <li>Review cards to see insights</li>
+                        </ul>
+                    </div>
+                </div>
 
                 <div class="flashcard-row">
                     <div class="flashcard" id="flashcard" onclick="flipCard()">
                         <div class="card-inner" id="card-inner">
                             <div class="card-front">
-                                <h2 id="card-question">Your Question Will Appear Here</h2>
+                                <h2 id="card-question">Loading...</h2>
                             </div>
                             <div class="card-back">
-                                <h2 id="card-answer">The Answer Will Appear Here</h2>
+                                <h2 id="card-answer">...</h2>
                             </div>
                         </div>
                     </div>
-
-                    <button id="save-btn" class="add-btn" onclick="openAddCardModal()" aria-label="Add flashcard">+</button>
+                    <button type="button" class="add-btn" onclick="openAddCardModal()" aria-label="Add Flashcard">+</button>
                 </div>
 
                 <div class="controls">
-                    <button onclick="prevCard()">&#8592; Previous</button>
+                    <button type="button" onclick="prevCard()">&#8592; Previous</button>
                     <span id="card-index">0 / 0</span>
-                    <button onclick="nextCard()">Next &#8594;</button>
+                    <button type="button" onclick="nextCard()">Next &#8594;</button>
                 </div>
-                
+
+                <div id="review-actions" class="review-actions">
+                    <button class="review-btn review-again" onclick="reviewCurrentCard('again')" disabled>1 - Again</button>
+                    <button class="review-btn review-hard" onclick="reviewCurrentCard('hard')" disabled>2 - Hard</button>
+                    <button class="review-btn review-good" onclick="reviewCurrentCard('good')" disabled>3 - Good</button>
+                    <button class="review-btn review-easy" onclick="reviewCurrentCard('easy')" disabled>4 - Easy</button>
+                </div>
+
                 <div class="actions">
-                    <button class="edit-btn" onclick="editFlashcard()">Edit Current</button>
-                    <button class="delete-btn" onclick="deleteFlashcard()">Delete Current</button>
+                    <button type="button" class="edit-btn" onclick="editFlashcard()">Edit</button>
+                    <button type="button" class="delete-btn" onclick="deleteFlashcard()">Delete</button>
                 </div>
-                
-                <p id="error-msg" class="error"></p>
-            </div>
+            </section>
         </div>
-    </div>
+    </main>
 
     <div id="add-card-modal" class="modal-overlay" aria-hidden="true">
         <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="add-card-title">
-            <button class="modal-close" type="button" data-close-modal="add-card-modal" aria-label="Close add card form">×</button>
-            <h2 id="add-card-title">Add New Flashcard</h2>
-            <p class="modal-subtitle">Collection: <span id="add-card-collection-name">All Collections</span></p>
-
+            <button type="button" class="modal-close" data-close-modal="add-card-modal" aria-label="Close modal">&times;</button>
+            <h2 id="add-card-title">Add New Card</h2>
+            <p class="modal-subtitle">Adding to: <span id="add-card-collection-name"></span></p>
             <form id="add-card-form" class="modal-form">
                 <label for="modal-question">Question</label>
-                <textarea id="modal-question" name="question" rows="4" placeholder="Type your question..." required></textarea>
-
+                <textarea id="modal-question" placeholder="E.g., What is the capital of France?"></textarea>
+                
                 <label for="modal-answer">Answer</label>
-                <textarea id="modal-answer" name="answer" rows="4" placeholder="Type your answer..." required></textarea>
+                <textarea id="modal-answer" placeholder="E.g., Paris"></textarea>
+                
                 <p id="add-card-error" class="modal-error" aria-live="polite"></p>
-
                 <div class="modal-actions">
                     <button type="button" class="modal-cancel-btn" data-close-modal="add-card-modal">Cancel</button>
                     <button type="submit" class="modal-save-btn">Save Card</button>
@@ -295,25 +271,24 @@
     </div>
 
     <div id="collection-modal" class="modal-overlay" aria-hidden="true">
-        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="collection-modal-title">
-            <button class="modal-close" type="button" data-close-modal="collection-modal" aria-label="Close collection form">×</button>
+        <div class="modal-dialog modal-compact" role="dialog" aria-modal="true" aria-labelledby="collection-modal-title">
+            <button type="button" class="modal-close" data-close-modal="collection-modal" aria-label="Close modal">&times;</button>
             <h2 id="collection-modal-title">Create Collection</h2>
             <p id="collection-modal-subtitle" class="modal-subtitle">Group cards by class, chapter, or exam topic.</p>
-
             <form id="collection-form" class="modal-form">
                 <label for="collection-name-input">Collection Name</label>
-                <input id="collection-name-input" name="name" type="text" placeholder="Chapter 5 Review" required />
+                <input id="collection-name-input" type="text" placeholder="E.g., Chapter 1" />
+                
+                <label for="collection-class-input">Class / Tag (Optional)</label>
+                <input id="collection-class-input" type="text" placeholder="E.g., Biology 101" />
 
-                <label for="collection-class-input">Class Name (Optional)</label>
-                <input id="collection-class-input" name="class_name" type="text" placeholder="Physics 101" />
-
-                <label for="collection-color-input">Collection Color</label>
+                <label for="collection-color-input">Theme Color</label>
                 <div class="color-input-row">
-                    <input id="collection-color-input" name="color" type="color" value="#0f4c5c" />
+                    <input id="collection-color-input" type="color" value="#0f4c5c" />
                     <span id="collection-color-value">#0F4C5C</span>
                 </div>
-                <p id="collection-error" class="modal-error" aria-live="polite"></p>
 
+                <p id="collection-error" class="modal-error" aria-live="polite"></p>
                 <div class="modal-actions">
                     <button type="button" class="modal-cancel-btn" data-close-modal="collection-modal">Cancel</button>
                     <button id="collection-submit-btn" type="submit" class="modal-save-btn">Create Collection</button>
@@ -324,18 +299,17 @@
 
     <div id="edit-card-modal" class="modal-overlay" aria-hidden="true">
         <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="edit-card-title">
-            <button class="modal-close" type="button" data-close-modal="edit-card-modal" aria-label="Close edit card form">×</button>
+            <button type="button" class="modal-close" data-close-modal="edit-card-modal" aria-label="Close modal">&times;</button>
             <h2 id="edit-card-title">Edit Flashcard</h2>
-            <p class="modal-subtitle">Refine your card for better recall.</p>
-
+            <p class="modal-subtitle">Update the question or answer.</p>
             <form id="edit-card-form" class="modal-form">
                 <label for="edit-question">Question</label>
-                <textarea id="edit-question" name="question" rows="4" required></textarea>
-
+                <textarea id="edit-question"></textarea>
+                
                 <label for="edit-answer">Answer</label>
-                <textarea id="edit-answer" name="answer" rows="4" required></textarea>
+                <textarea id="edit-answer"></textarea>
+                
                 <p id="edit-card-error" class="modal-error" aria-live="polite"></p>
-
                 <div class="modal-actions">
                     <button type="button" class="modal-cancel-btn" data-close-modal="edit-card-modal">Cancel</button>
                     <button type="submit" class="modal-save-btn">Save Changes</button>
@@ -346,9 +320,8 @@
 
     <div id="confirm-modal" class="modal-overlay" aria-hidden="true">
         <div class="modal-dialog modal-compact" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-            <button class="modal-close" type="button" data-close-modal="confirm-modal" aria-label="Close confirmation">×</button>
-            <h2 id="confirm-title">Please Confirm</h2>
-            <p id="confirm-message" class="modal-subtitle">Are you sure you want to continue?</p>
+            <h2 id="confirm-title">Confirm</h2>
+            <p id="confirm-message" class="modal-subtitle">Are you sure you want to proceed?</p>
             <div class="modal-actions">
                 <button type="button" class="modal-cancel-btn" data-close-modal="confirm-modal">Cancel</button>
                 <button id="confirm-action-btn" type="button" class="modal-save-btn">Confirm</button>

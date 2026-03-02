@@ -1,4 +1,4 @@
-const API_URL = "https://flashcardapp-pwic.onrender.com";
+const API_URL = window.APP_CONFIG.API_URL;
 const REVIEW_RATINGS = ["again", "hard", "good", "easy"];
 
 let collections = [];

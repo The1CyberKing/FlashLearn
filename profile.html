@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FlashLearn Profile</title>
+    
+    <script src="config.js"></script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -23,56 +26,74 @@
 
             <div class="topbar-meta">
                 <div class="topbar-user" aria-label="Current profile">
-                    <img id="topbar-avatar-image" class="topbar-avatar-image" alt="Profile avatar" hidden />
+                    <img id="topbar-avatar-image" class="topbar-avatar" src="" alt="Avatar" hidden>
                     <span id="topbar-avatar-fallback" class="topbar-avatar" aria-hidden="true">FL</span>
-                    <span id="topbar-user-name">Loading...</span>
+                    <span id="topbar-user-name" class="topbar-name">Learner</span>
                 </div>
-                <button id="profile-logout-btn" class="topbar-logout" type="button">Log Out</button>
             </div>
         </header>
 
-        <p id="profile-status" class="profile-status" role="status">Loading your profile...</p>
+        <p id="profile-status" class="profile-status" aria-live="polite">Loading profile data...</p>
 
         <main id="profile-main" class="profile-main" hidden>
-            <section class="hero-card">
-                <img id="hero-avatar-image" class="hero-avatar-image" alt="Profile avatar" hidden />
-                <div id="hero-avatar-fallback" class="hero-avatar" aria-hidden="true">FL</div>
-                <h1 id="profile-display-name">Learner</h1>
-                <p class="hero-subtitle">Account &amp; Settings</p>
-
-                <div class="hero-stats">
-                    <article class="stat">
-                        <h2 id="profile-total-flashcards">0</h2>
-                        <p>Total flashcards</p>
-                    </article>
-                    <article class="stat">
-                        <h2 id="profile-member-since">-</h2>
-                        <p>Member since</p>
-                    </article>
+            <section class="hero-section">
+                <div class="hero-avatar-wrap">
+                    <img id="hero-avatar-image" class="hero-avatar" src="" alt="Profile picture" hidden>
+                    <span id="hero-avatar-fallback" class="hero-avatar" aria-hidden="true">FL</span>
+                </div>
+                <h1 id="profile-display-name" class="hero-title">Learner</h1>
+                <p class="hero-subtitle">FlashLearn Student</p>
+                <div class="hero-actions">
+                    <button id="profile-logout-btn" type="button" class="logout-btn">Log Out</button>
                 </div>
             </section>
 
-            <section class="settings-card" aria-label="Profile settings">
+            <section class="settings-card" aria-label="Account details">
+                <h2 class="settings-title">Account Details</h2>
+                
                 <article class="setting-row">
                     <div>
-                        <p class="setting-label">First name</p>
+                        <p class="setting-label">First Name</p>
                         <p id="profile-first-name" class="setting-value">-</p>
                     </div>
-                    <button type="button" disabled>Soon</button>
                 </article>
-
+                
                 <article class="setting-row">
                     <div>
-                        <p class="setting-label">Last name</p>
+                        <p class="setting-label">Last Name</p>
                         <p id="profile-last-name" class="setting-value">-</p>
                     </div>
-                    <button type="button" disabled>Soon</button>
                 </article>
 
                 <article class="setting-row">
                     <div>
-                        <p class="setting-label">Email address</p>
-                        <p id="profile-email" class="setting-value setting-value-email">-</p>
+                        <p class="setting-label">Email Address</p>
+                        <p id="profile-email" class="setting-value">-</p>
+                    </div>
+                </article>
+
+                <article class="setting-row">
+                    <div>
+                        <p class="setting-label">Member Since</p>
+                        <p id="profile-member-since" class="setting-value">-</p>
+                    </div>
+                </article>
+
+                <article class="setting-row">
+                    <div>
+                        <p class="setting-label">Total Flashcards</p>
+                        <p id="profile-total-flashcards" class="setting-value">-</p>
+                    </div>
+                </article>
+            </section>
+
+            <section class="settings-card" aria-label="Preferences">
+                <h2 class="settings-title">Preferences</h2>
+
+                <article class="setting-row">
+                    <div>
+                        <p class="setting-label">Dark Mode</p>
+                        <p class="setting-value">Switch to a darker theme</p>
                     </div>
                     <button type="button" disabled>Soon</button>
                 </article>
@@ -94,6 +115,7 @@
             </section>
         </main>
     </div>
-    <script type="module" src="profile.js?v=3"></script>
+    
+    <script type="module" src="profile.js"></script>
 </body>
 </html>

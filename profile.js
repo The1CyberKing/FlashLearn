@@ -1,9 +1,8 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
-const SUPABASE_URL = "https://sfxtsemiitbruxmdurva.supabase.co";
-const SUPABASE_ANON_KEY =
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmeHRzZW1paXRicnV4bWR1cnZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMjE3NjcsImV4cCI6MjA4NTg5Nzc2N30.M4ErTSvcEIezdt72o-DBYFONe5l9UWWoQYGy2-HkaeA";
-const API_URL = "https://flashcardapp-pwic.onrender.com";
+const SUPABASE_URL = window.APP_CONFIG.SUPABASE_URL;
+const SUPABASE_ANON_KEY = window.APP_CONFIG.SUPABASE_ANON_KEY;
+const API_URL = window.APP_CONFIG.API_URL;
 const LOGIN_REDIRECT_BASE = "login.html";
 const AVATAR_PRESET_KEY = "flashlearnAvatarPreset";
 const AVATAR_PRESETS = {

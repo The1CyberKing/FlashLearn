@@ -1,12 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlashLearn Quiz Mode</title>
+    
+    <script src="config.js"></script>
+
     <script type="module">
     import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
-    const SUPABASE_URL = "https://sfxtsemiitbruxmdurva.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmeHRzZW1paXRicnV4bWR1cnZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMjE3NjcsImV4cCI6MjA4NTg5Nzc2N30.M4ErTSvcEIezdt72o-DBYFONe5l9UWWoQYGy2-HkaeA";
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const supabase = createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_ANON_KEY);
 
     function setStoredToken(session) {
         if (session?.access_token) {
@@ -36,7 +40,7 @@
         const { error } = await supabase.auth.signInWithOAuth({
             provider: "google",
             options: {
-                redirectTo: `${window.location.origin}${window.location.pathname}`,
+                redirectTo: `${window.APP_CONFIG.FRONTEND_URL}${window.location.pathname}`,
             },
         });
 
@@ -55,9 +59,7 @@
         location.reload();
     };
     </script>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FlashLearn Quiz Mode</title>
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -74,7 +76,7 @@
             aria-expanded="false"
             aria-controls="profile-menu"
         >
-            <span class="profile-avatar" aria-hidden="true">JS</span>
+            <span class="profile-avatar" aria-hidden="true">U</span>
             <svg class="profile-caret" viewBox="0 0 16 16" aria-hidden="true">
                 <path d="M4.22 6.72a.75.75 0 0 1 1.06 0L8 9.44l2.72-2.72a.75.75 0 0 1 1.06 1.06L8.53 11.03a.75.75 0 0 1-1.06 0L4.22 7.78a.75.75 0 0 1 0-1.06z"/>
             </svg>
