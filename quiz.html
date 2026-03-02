@@ -90,43 +90,96 @@
 
     <main class="quiz-shell">
         <header class="quiz-header">
-            <a href="index.html" class="back-link">&#8592; Back to Flashcards</a>
-            <p class="eyebrow">FlashLearn</p>
-            <h1>Quiz Mode</h1>
-            <p class="subhead">Focused review with spaced repetition and live performance tracking.</p>
+            <div class="quiz-header-copy">
+                <a href="index.html" class="back-link">&#8592; Back to Flashcards</a>
+                <p class="eyebrow">FlashLearn</p>
+                <h1>Quiz Mode</h1>
+                <p class="subhead">Browse your sets, pick a focus area, and jump into review with live performance tracking.</p>
+            </div>
+            <div class="quiz-header-actions">
+                <label class="scope-select-wrap" for="quiz-collection-select">
+                    <span>Quick Scope</span>
+                    <select id="quiz-collection-select">
+                        <option value="all">All Collections</option>
+                    </select>
+                </label>
+                <button id="refresh-cards-btn" type="button">Reset Selected Stats</button>
+            </div>
         </header>
 
-        <section class="quiz-controls">
-            <label for="quiz-collection-select">Collection</label>
-            <select id="quiz-collection-select">
-                <option value="all">All Collections</option>
-            </select>
-            <button id="refresh-cards-btn" type="button">Refresh</button>
-        </section>
-
         <section class="quiz-dashboard" aria-live="polite">
-            <article class="dash-card">
-                <p>Total Cards</p>
-                <strong id="quiz-total">0</strong>
+            <article class="dash-card dash-card-violet">
+                <span class="dash-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M5 6.5A2.5 2.5 0 0 1 7.5 4H20v13.5A2.5 2.5 0 0 0 17.5 15H5zM5 6.5V20h12.5A2.5 2.5 0 0 1 20 22H7.5A2.5 2.5 0 0 1 5 19.5zM8 8h9M8 11h9" />
+                    </svg>
+                </span>
+                <div>
+                    <p>Total Sets</p>
+                    <strong id="quiz-set-count">0</strong>
+                </div>
             </article>
-            <article class="dash-card">
-                <p>Mastered</p>
-                <strong id="quiz-mastered">0</strong>
+            <article class="dash-card dash-card-blue">
+                <span class="dash-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 6v6l4 2M21 12a9 9 0 1 1-18 0a9 9 0 0 1 18 0z" />
+                    </svg>
+                </span>
+                <div>
+                    <p>Total Cards</p>
+                    <strong id="quiz-total">0</strong>
+                </div>
             </article>
-            <article class="dash-card">
-                <p>Accuracy</p>
-                <strong id="quiz-accuracy">0%</strong>
+            <article class="dash-card dash-card-pink">
+                <span class="dash-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path d="m4 16 5-5 4 4 7-7M14 8h6v6" />
+                    </svg>
+                </span>
+                <div>
+                    <p>Avg. Mastery</p>
+                    <strong id="quiz-avg-mastery">0%</strong>
+                </div>
             </article>
-            <article class="dash-card">
-                <p>Reviewed Today</p>
-                <strong id="quiz-reviewed-today">0</strong>
+            <article class="dash-card dash-card-gold">
+                <span class="dash-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 7v5l3 3M5 4h14M6 20h12M8 4v4M16 4v4M6 12a6 6 0 1 0 12 0a6 6 0 0 0-12 0z" />
+                    </svg>
+                </span>
+                <div>
+                    <p>Reviewed Today</p>
+                    <strong id="quiz-reviewed-today">0</strong>
+                </div>
             </article>
         </section>
 
-        <section class="quiz-panel">
-            <p id="quiz-active-scope" class="quiz-active-scope">Scope: All Collections</p>
+        <section class="quiz-discovery">
+            <label class="search-shell" for="quiz-search-input">
+                <span class="search-label">Find a set</span>
+                <input
+                    id="quiz-search-input"
+                    type="search"
+                    placeholder="Search your flashcard sets..."
+                    autocomplete="off"
+                />
+            </label>
+            <p id="quiz-active-scope" class="quiz-active-scope">Selected quiz scope: All Collections</p>
+            <div id="quiz-collection-grid" class="quiz-collection-grid" aria-live="polite"></div>
+            <p id="quiz-collection-empty" class="quiz-collection-empty is-hidden"></p>
+        </section>
+
+        <section id="quiz-panel" class="quiz-panel">
+            <div class="quiz-panel-top">
+                <div>
+                    <p class="quiz-panel-label">Active Quiz</p>
+                    <h2 id="quiz-panel-title">All Collections</h2>
+                </div>
+                <span id="quiz-card-index" class="quiz-chip">0 / 0</span>
+            </div>
+
             <div class="quiz-card">
-                <h2 id="quiz-question">Log in to start quiz mode.</h2>
+                <h3 id="quiz-question">Log in to start quiz mode.</h3>
                 <p class="answer-prompt">Type your answer, then check it.</p>
                 <form id="quiz-answer-form" class="answer-form">
                     <input id="quiz-answer-input" type="text" placeholder="Type your answer..." autocomplete="off" />
@@ -136,10 +189,6 @@
                     <p id="quiz-answer">Answer will appear here.</p>
                 </div>
                 <button id="reveal-answer-btn" type="button" class="reveal-btn">Show Correct Answer</button>
-            </div>
-
-            <div class="quiz-meta">
-                <span id="quiz-card-index">0 / 0</span>
             </div>
 
             <div class="quiz-nav">

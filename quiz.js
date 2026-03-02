@@ -6,15 +6,21 @@ let allCards = [];
 let filteredCards = [];
 let activeCollection = "all";
 let currentIndex = 0;
+let collectionSearchTerm = "";
 const quizAttemptsByCard = new Map();
 
 const collectionSelect = document.getElementById("quiz-collection-select");
+const collectionSearchInput = document.getElementById("quiz-search-input");
 const refreshButton = document.getElementById("refresh-cards-btn");
 const activeScopeText = document.getElementById("quiz-active-scope");
+const collectionGrid = document.getElementById("quiz-collection-grid");
+const collectionEmptyElement = document.getElementById("quiz-collection-empty");
+const quizPanel = document.getElementById("quiz-panel");
+const panelTitleElement = document.getElementById("quiz-panel-title");
 
+const setCountElement = document.getElementById("quiz-set-count");
 const totalCardsElement = document.getElementById("quiz-total");
-const masteredCardsElement = document.getElementById("quiz-mastered");
-const accuracyElement = document.getElementById("quiz-accuracy");
+const avgMasteryElement = document.getElementById("quiz-avg-mastery");
 const reviewedTodayElement = document.getElementById("quiz-reviewed-today");
 
 const questionElement = document.getElementById("quiz-question");
@@ -49,7 +55,7 @@ function getHeaders() {
     const token = localStorage.getItem("userToken");
     return {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
+        "Authorization": `Bearer ${token}`,
     };
 }
 
@@ -81,6 +87,13 @@ function isSameLocalDay(dateA, dateB) {
     return dateA.getFullYear() === dateB.getFullYear()
         && dateA.getMonth() === dateB.getMonth()
         && dateA.getDate() === dateB.getDate();
+}
+
+function hasBeenReviewedRecently(date) {
+    if (!date) return false;
+    const diffMs = Date.now() - date.getTime();
+    if (!Number.isFinite(diffMs) || diffMs < 0) return false;
+    return diffMs <= 1000 * 60 * 60 * 24 * 7;
 }
 
 function getCardAccuracy(card) {
@@ -122,15 +135,59 @@ function getCollectionDisplayName(collection) {
     return collection.name;
 }
 
+function getCardsForCollection(collectionId) {
+    return allCards.filter((card) => String(card.collection_id) === String(collectionId));
+}
+
 function getScopedCards() {
     if (activeCollection === "all") {
         return [...allCards];
     }
-    return allCards.filter((card) => String(card.collection_id) === String(activeCollection));
+    return getCardsForCollection(activeCollection);
 }
 
 function getVisibleCards() {
     return getScopedCards();
+}
+
+function getMasteryPercent(cards) {
+    if (!cards.length) return 0;
+    const masteredCount = cards.filter((card) => isCardMastered(card)).length;
+    return Math.round((masteredCount / cards.length) * 100);
+}
+
+function getReviewedTodayCount(cards) {
+    const now = new Date();
+    return cards.filter((card) => {
+        const reviewedAt = toDateOrNull(card.last_reviewed_at);
+        return reviewedAt ? isSameLocalDay(reviewedAt, now) : false;
+    }).length;
+}
+
+function getCollectionSubtitle(collection, cards) {
+    if (collection?.class_name) {
+        return `Class: ${collection.class_name}`;
+    }
+    if (cards.length === 0) {
+        return "No cards in this set yet";
+    }
+    if (cards.length === 1) {
+        return "1 prompt ready for review";
+    }
+    return `${cards.length} prompts ready for review`;
+}
+
+function getCollectionReviewLabel(cards) {
+    const latestReviewedAt = cards.reduce((latest, card) => {
+        const reviewedAt = toDateOrNull(card.last_reviewed_at);
+        if (!reviewedAt) return latest;
+        if (!latest || reviewedAt > latest) return reviewedAt;
+        return latest;
+    }, null);
+
+    if (!latestReviewedAt) return "Not studied yet";
+    if (hasBeenReviewedRecently(latestReviewedAt)) return "Studied recently";
+    return "Needs review";
 }
 
 function setStatus(message, tone = "info") {
@@ -163,29 +220,30 @@ function renderCollectionOptions() {
 }
 
 function updateDashboard() {
-    const scopedCards = getScopedCards();
-    const totalCards = scopedCards.length;
-    const masteredCards = scopedCards.filter((card) => isCardMastered(card)).length;
-    const totalReviews = scopedCards.reduce((sum, card) => sum + toNonNegativeInteger(card.review_count, 0), 0);
-    const totalCorrect = scopedCards.reduce((sum, card) => sum + toNonNegativeInteger(card.correct_count, 0), 0);
-    const reviewedToday = scopedCards.filter((card) => {
-        const reviewedAt = toDateOrNull(card.last_reviewed_at);
-        return reviewedAt ? isSameLocalDay(reviewedAt, new Date()) : false;
-    }).length;
-    const accuracy = totalReviews > 0 ? Math.round((totalCorrect / totalReviews) * 100) : 0;
-
-    if (totalCardsElement) totalCardsElement.textContent = String(totalCards);
-    if (masteredCardsElement) masteredCardsElement.textContent = String(masteredCards);
-    if (accuracyElement) accuracyElement.textContent = `${accuracy}%`;
-    if (reviewedTodayElement) reviewedTodayElement.textContent = String(reviewedToday);
+    if (setCountElement) setCountElement.textContent = String(collections.length);
+    if (totalCardsElement) totalCardsElement.textContent = String(allCards.length);
+    if (avgMasteryElement) avgMasteryElement.textContent = `${getMasteryPercent(allCards)}%`;
+    if (reviewedTodayElement) reviewedTodayElement.textContent = String(getReviewedTodayCount(allCards));
 }
 
 function updateModeUI() {
     const selectedCollection = activeCollection === "all"
         ? null
         : collections.find((collection) => String(collection.id) === String(activeCollection)) || null;
+    const scopedCards = getScopedCards();
+    const masteryPercent = getMasteryPercent(scopedCards);
+    const scopeName = getCollectionDisplayName(selectedCollection);
+
+    if (panelTitleElement) {
+        panelTitleElement.textContent = scopeName;
+    }
+
     if (activeScopeText) {
-        activeScopeText.textContent = `Scope: ${getCollectionDisplayName(selectedCollection)}`;
+        activeScopeText.textContent = `Selected quiz scope: ${scopeName} • ${scopedCards.length} cards • ${masteryPercent}% mastery`;
+    }
+
+    if (collectionSelect) {
+        collectionSelect.value = activeCollection;
     }
 }
 
@@ -219,8 +277,14 @@ function renderCard() {
     }
 
     if (!filteredCards.length) {
-        if (questionElement) questionElement.textContent = "No cards in this scope yet.";
-        if (answerElement) answerElement.textContent = "Add cards from the main page and refresh.";
+        if (questionElement) {
+            questionElement.textContent = activeCollection === "all"
+                ? "No cards available yet."
+                : "No cards in this collection yet.";
+        }
+        if (answerElement) {
+            answerElement.textContent = "Add cards from the main page and return here.";
+        }
         if (cardIndexElement) cardIndexElement.textContent = "0 / 0";
         resetAnswerView();
         updateInteractionState();
@@ -233,6 +297,104 @@ function renderCard() {
     if (cardIndexElement) cardIndexElement.textContent = `${currentIndex + 1} / ${filteredCards.length}`;
     resetAnswerView();
     updateInteractionState();
+}
+
+function createCollectionCard(collection) {
+    const collectionCards = getCardsForCollection(collection.id);
+    const cardCount = collectionCards.length;
+    const masteryPercent = getMasteryPercent(collectionCards);
+    const reviewLabel = getCollectionReviewLabel(collectionCards);
+
+    const cardButton = document.createElement("button");
+    cardButton.type = "button";
+    cardButton.className = "quiz-collection-card";
+    if (String(activeCollection) === String(collection.id)) {
+        cardButton.classList.add("is-active");
+    }
+    cardButton.setAttribute("aria-label", `Start quiz for ${getCollectionDisplayName(collection)}`);
+
+    cardButton.innerHTML = `
+        <div class="collection-card-top">
+            <h3 class="collection-card-title">${escapeHtml(collection.name || "Untitled Collection")}</h3>
+            <p class="collection-card-subtitle">${escapeHtml(getCollectionSubtitle(collection, collectionCards))}</p>
+        </div>
+        <div class="collection-card-meta">
+            <span>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 6.5A2.5 2.5 0 0 1 7.5 4H20v13.5A2.5 2.5 0 0 0 17.5 15H5zM5 6.5V20h12.5A2.5 2.5 0 0 1 20 22H7.5A2.5 2.5 0 0 1 5 19.5z" />
+                </svg>
+                ${cardCount} ${cardCount === 1 ? "card" : "cards"}
+            </span>
+            <span>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 6v6l4 2M21 12a9 9 0 1 1-18 0a9 9 0 0 1 18 0z" />
+                </svg>
+                ${escapeHtml(reviewLabel)}
+            </span>
+        </div>
+        <div class="collection-card-progress">
+            <div class="collection-progress-head">
+                <span>Mastery</span>
+                <span>${masteryPercent}%</span>
+            </div>
+            <div class="collection-progress-track" aria-hidden="true">
+                <div class="collection-progress-fill" style="width: ${masteryPercent}%"></div>
+            </div>
+        </div>
+        <span class="collection-card-action">Start Quiz &#8594;</span>
+    `;
+
+    cardButton.addEventListener("click", () => {
+        activateCollection(String(collection.id), { resetIndex: true, scrollToQuiz: true });
+    });
+
+    return cardButton;
+}
+
+function showCollectionEmptyState(message) {
+    if (!collectionEmptyElement) return;
+    collectionEmptyElement.textContent = message;
+    collectionEmptyElement.classList.remove("is-hidden");
+}
+
+function hideCollectionEmptyState() {
+    if (!collectionEmptyElement) return;
+    collectionEmptyElement.textContent = "";
+    collectionEmptyElement.classList.add("is-hidden");
+}
+
+function renderCollectionGrid() {
+    if (!collectionGrid) return;
+    collectionGrid.innerHTML = "";
+
+    if (!hasValidToken()) {
+        showCollectionEmptyState("Log in to browse your quiz sets.");
+        return;
+    }
+
+    if (!collections.length) {
+        showCollectionEmptyState("No collections yet. Create one from the flashcards page to start.");
+        return;
+    }
+
+    const visibleCollections = collections.filter((collection) => {
+        if (!collectionSearchTerm) return true;
+        const haystack = [
+            collection.name || "",
+            collection.class_name || "",
+        ].join(" ").toLowerCase();
+        return haystack.includes(collectionSearchTerm);
+    });
+
+    if (!visibleCollections.length) {
+        showCollectionEmptyState(`No collections match "${collectionSearchInput?.value?.trim() || ""}".`);
+        return;
+    }
+
+    hideCollectionEmptyState();
+    for (const collection of visibleCollections) {
+        collectionGrid.appendChild(createCollectionCard(collection));
+    }
 }
 
 function applyFilters({ preferredCardId = null, resetIndex = false } = {}) {
@@ -254,7 +416,23 @@ function applyFilters({ preferredCardId = null, resetIndex = false } = {}) {
 
     updateModeUI();
     updateDashboard();
+    renderCollectionGrid();
     renderCard();
+}
+
+function activateCollection(collectionId, { resetIndex = true, scrollToQuiz = false } = {}) {
+    activeCollection = collectionId || "all";
+    if (collectionSelect) {
+        collectionSelect.value = activeCollection;
+    }
+    applyFilters({ resetIndex });
+    setStatus("");
+
+    if (scrollToQuiz && quizPanel && typeof quizPanel.scrollIntoView === "function") {
+        quizPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    answerInput?.focus();
 }
 
 function normalizeAnswerText(value) {
@@ -544,7 +722,7 @@ async function handleAnswerSubmit(event) {
             applyFilters({ preferredCardId: nextCardId, resetIndex: false });
             setStatus(
                 isFirstTry
-                    ? "Correct on first try. Accuracy, reviewed today, and mastered were updated."
+                    ? "Correct on first try. Accuracy, reviewed today, and mastery were updated."
                     : "Correct. Accuracy and reviewed today were updated.",
                 "success"
             );
@@ -555,6 +733,7 @@ async function handleAnswerSubmit(event) {
         await submitReview(currentCard.id, "again");
         quizAttemptsByCard.set(currentCard.id, previousAttempts + 1);
         updateDashboard();
+        renderCollectionGrid();
 
         if (answerWrapElement) answerWrapElement.classList.remove("is-hidden");
         if (revealButton) revealButton.textContent = "Hide Correct Answer";
@@ -569,10 +748,14 @@ async function handleAnswerSubmit(event) {
 function setupEvents() {
     if (collectionSelect) {
         collectionSelect.addEventListener("change", () => {
-            activeCollection = collectionSelect.value || "all";
-            applyFilters({ resetIndex: true });
-            setStatus("");
-            answerInput?.focus();
+            activateCollection(collectionSelect.value || "all", { resetIndex: true });
+        });
+    }
+
+    if (collectionSearchInput) {
+        collectionSearchInput.addEventListener("input", () => {
+            collectionSearchTerm = String(collectionSearchInput.value || "").trim().toLowerCase();
+            renderCollectionGrid();
         });
     }
 
@@ -595,7 +778,10 @@ function setupEvents() {
         if (isConfirmModalOpen()) return;
 
         const activeTag = document.activeElement?.tagName?.toLowerCase();
-        const isTyping = activeTag === "input" || activeTag === "textarea" || document.activeElement?.isContentEditable;
+        const isTyping = activeTag === "input"
+            || activeTag === "textarea"
+            || activeTag === "select"
+            || document.activeElement?.isContentEditable;
 
         if (event.key === "ArrowRight") {
             if (isTyping) return;
@@ -626,12 +812,22 @@ function applyQueryParams() {
     if (collection) activeCollection = collection;
 }
 
+function escapeHtml(value) {
+    return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
 async function initializeQuizPage() {
     await waitForAuthBootstrap();
     applyQueryParams();
     setupEvents();
     updateModeUI();
     updateDashboard();
+    renderCollectionGrid();
     renderCard();
     await refreshData();
     answerInput?.focus();
