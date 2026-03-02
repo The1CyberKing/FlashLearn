@@ -6,6 +6,14 @@
 
     const SUPABASE_URL = "https://sfxtsemiitbruxmdurva.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmeHRzZW1paXRicnV4bWR1cnZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMjE3NjcsImV4cCI6MjA4NTg5Nzc2N30.M4ErTSvcEIezdt72o-DBYFONe5l9UWWoQYGy2-HkaeA";
+    const AVATAR_PRESET_KEY = "flashlearnAvatarPreset";
+    const AVATAR_PRESETS = {
+        fox: { emoji: "🦊", background: "linear-gradient(160deg, #ffd7ad, #f1a35f)" },
+        owl: { emoji: "🦉", background: "linear-gradient(160deg, #e5d6ff, #bca8f1)" },
+        panda: { emoji: "🐼", background: "linear-gradient(160deg, #e4eef5, #bdd0de)" },
+        whale: { emoji: "🐋", background: "linear-gradient(160deg, #c7ebff, #8fc3e7)" },
+        cat: { emoji: "🐱", background: "linear-gradient(160deg, #ffe2cf, #f4b28c)" },
+    };
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     function setStoredToken(session) {
@@ -16,20 +24,72 @@
         localStorage.removeItem("userToken");
     }
 
+    function getDisplayName(user) {
+        const metadata = user?.user_metadata || {};
+        return (
+            metadata.full_name ||
+            metadata.name ||
+            user?.email ||
+            "Learner"
+        );
+    }
+
+    function getInitials(displayName) {
+        const parts = (displayName || "").trim().split(/\s+/).filter(Boolean);
+        if (parts.length === 0) return "FL";
+        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+        return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+
+    function syncHeaderAvatar(user) {
+        const avatarBadge = document.getElementById("header-profile-avatar");
+        if (!avatarBadge) return;
+
+        avatarBadge.classList.remove("has-photo", "avatar-custom");
+        avatarBadge.style.background = "";
+        avatarBadge.style.backgroundImage = "";
+
+        const selectedPreset = localStorage.getItem(AVATAR_PRESET_KEY) || "google";
+        if (selectedPreset !== "google" && AVATAR_PRESETS[selectedPreset]) {
+            const preset = AVATAR_PRESETS[selectedPreset];
+            avatarBadge.classList.add("avatar-custom");
+            avatarBadge.textContent = preset.emoji;
+            avatarBadge.style.background = preset.background;
+            return;
+        }
+
+        const displayName = getDisplayName(user);
+        const metadata = user?.user_metadata || {};
+        const avatarUrl = metadata.avatar_url || metadata.picture || "";
+
+        if (avatarUrl) {
+            const safeUrl = avatarUrl.replace(/"/g, "%22");
+            avatarBadge.classList.add("has-photo");
+            avatarBadge.textContent = "";
+            avatarBadge.style.backgroundImage = `url("${safeUrl}")`;
+            return;
+        }
+
+        avatarBadge.textContent = getInitials(displayName);
+    }
+
     async function syncSession() {
         const { data, error } = await supabase.auth.getSession();
         if (error) {
             console.error("Failed to read Supabase session:", error);
             localStorage.removeItem("userToken");
+            syncHeaderAvatar(null);
             return;
         }
         setStoredToken(data.session);
+        syncHeaderAvatar(data.session?.user || null);
     }
 
     window.authReady = syncSession();
 
     supabase.auth.onAuthStateChange((_event, session) => {
         setStoredToken(session);
+        syncHeaderAvatar(session?.user || null);
     });
 
     window.login = async () => {
@@ -52,6 +112,7 @@
             console.error("Logout failed:", error);
         }
         localStorage.removeItem("userToken");
+        syncHeaderAvatar(null);
         location.reload();
     };
     </script>
@@ -74,7 +135,7 @@
             aria-expanded="false"
             aria-controls="profile-menu"
         >
-            <span class="profile-avatar" aria-hidden="true">JS</span>
+            <span id="header-profile-avatar" class="profile-avatar" aria-hidden="true">FL</span>
             <svg class="profile-caret" viewBox="0 0 16 16" aria-hidden="true">
                 <path d="M4.22 6.72a.75.75 0 0 1 1.06 0L8 9.44l2.72-2.72a.75.75 0 0 1 1.06 1.06L8.53 11.03a.75.75 0 0 1-1.06 0L4.22 7.78a.75.75 0 0 1 0-1.06z"/>
             </svg>

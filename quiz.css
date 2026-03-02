@@ -97,6 +97,20 @@ body {
     color: #1a2f3c;
     background: linear-gradient(160deg, #dbe8ff, #c0d8e8);
     box-shadow: inset 0 0 0 1px rgba(26, 47, 60, 0.08);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.profile-avatar.has-photo {
+    color: transparent;
+    text-indent: -9999px;
+}
+
+.profile-avatar.avatar-custom {
+    font-size: 0.95rem;
+    line-height: 1;
+    letter-spacing: 0;
 }
 
 .profile-caret {
