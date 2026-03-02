@@ -1,195 +1,158 @@
-
-* **Website: [FlashLearn](https://poqq123.github.io/FlashLearn/)**
-
-## New Features
-
-You can now:
-- Create named collections (optionally tagged with a class name)
-- Assign cards to a collection when creating cards
-- Filter the flashcard view by selected collection
-- Fetch cards by collection through dedicated API endpoints
-- Use a dedicated collection-based pop quiz page
-- Rate each quiz outcome through review updates (`again`, `hard`, `easy`)
-- Track learning progress in a dashboard (total, mastered, accuracy, reviewed today)
-
-## Backend Overview
-
-Main backend file: `/Users/GeneralUse/LinuxHome/FlashcardTest/main.py`
-
-### Data model
-- `flashcards`
-  - `id`
-  - `user_id`
-  - `question`
-  - `answer`
-  - `collection_id` (nullable)
-  - `review_count`
-  - `correct_count`
-  - `ease_factor`
-  - `interval_days`
-  - `due_at`
-  - `last_reviewed_at` (nullable)
-  - `streak_current`
-  - `streak_best`
-- `collections`
-  - `id`
-  - `user_id`
-  - `name`
-  - `class_name` (nullable)
-
-### Startup schema guard
-
-`main.py` includes `ensure_schema()` which:
-- keeps existing DBs working
-- adds missing `flashcards` learning columns when needed
-- creates indexes if missing
-
-This avoids dropping tables for existing deployments.
-
-## API Documentation
-
-All endpoints below require a Supabase bearer token in `Authorization` header.
-
-### Health
-- `GET /`
-  - Returns service status text.
-
-### Collections
-- `GET /collections`
-  - Lists current user collections.
-
-- `POST /collections`
-  - Body:
-    ```json
-    {
-      "name": "Chapter 3",
-      "class_name": "Biology 101"
-    }
-    ```
-  - Creates a collection for the authenticated user.
-
-- `DELETE /collections/{collection_id}`
-  - Deletes a collection owned by the current user.
-  - Cards in that collection are unassigned (`collection_id = null`).
-
-- `GET /collections/{collection_id}/cards`
-  - Returns cards in one owned collection.
-
-### Cards
-- `GET /cards`
-  - Returns all cards for current user.
-
-- `GET /cards?collection_id=123`
-  - Returns cards for one owned collection.
-
-- `POST /cards`
-  - Body:
-    ```json
-    {
-      "question": "What is ATP?",
-      "answer": "Cell energy currency",
-      "collection_id": 123
-    }
-    ```
-  - `collection_id` can be `null`.
-
-- `PUT /cards/{card_id}`
-  - Body:
-    ```json
-    {
-      "question": "Updated question",
-      "answer": "Updated answer",
-      "collection_id": 123
-    }
-    ```
-  - Updates owned card only.
-
-- `DELETE /cards/{card_id}`
-  - Deletes owned card only.
-
-- `POST /cards/{card_id}/review`
-  - Body:
-    ```json
-    {
-      "rating": "good"
-    }
-    ```
-  - Allowed ratings: `again`, `hard`, `good`, `easy`
-  - Updates review stats and schedules the next due time for that card.
-
-- `POST /cards/reset-progress`
-  - Body:
-    ```json
-    {
-      "collection_id": 123
-    }
-    ```
-  - `collection_id` is optional (`null` resets all of the user's cards).
-  - Resets performance fields to defaults (`review_count`, `correct_count`, `ease_factor`, `interval_days`, `last_reviewed_at`, streaks).
-
-## Frontend Changes
-
-Updated files:
-- `/Users/GeneralUse/LinuxHome/FlashcardTest/index.html`
-- `/Users/GeneralUse/LinuxHome/FlashcardTest/script.js`
-- `/Users/GeneralUse/LinuxHome/FlashcardTest/style.css`
-- `/Users/GeneralUse/LinuxHome/FlashcardTest/quiz.html`
-- `/Users/GeneralUse/LinuxHome/FlashcardTest/quiz.js`
-- `/Users/GeneralUse/LinuxHome/FlashcardTest/quiz.css`
-
-Added UI:
-- Collection dropdown (`All Collections` + user collections)
-- `New Collection` button
-- Active collection label
-- `Study Mode` button on the main page that opens a dedicated quiz webpage
-- Quiz webpage with collection-based pop-quiz flow
-- Quiz webpage pop-quiz input (type answer and check)
-- Quiz webpage progress dashboard for total, mastered, accuracy, and reviewed today
-- Quiz `Refresh` button resets selected-scope performance stats to defaults
-
-Behavior:
-- Cards are fetched according to the selected collection.
-- New cards are assigned to selected collection (or unassigned when `All Collections` is selected).
-- Quiz checks typed answers against flashcard answers (case/punctuation tolerant).
-- Correct first-try answers are logged as strong reviews and can move cards into mastered status.
-- Incorrect answers are logged and reduce overall accuracy.
-
-## Deployment Notes
-
-To ship this feature:
-1. Redeploy backend service on Render (required).
-2. Deploy updated frontend (GitHub Pages or your host) (required for UI feature).
-3. Set Supabase auth config on frontend in `/Users/GeneralUse/LinuxHome/FlashcardTest/index.html`:
-   - `SUPABASE_URL`
-   - `SUPABASE_ANON_KEY`
-4. Set backend auth environment variables:
-   - `DATABASE_URL`
-   - `SUPABASE_URL`
-   - `SUPABASE_JWT_SECRET` (required when your project signs auth JWTs with HS256)
-   - `SUPABASE_JWT_ISSUER` (optional override, defaults to `${SUPABASE_URL}/auth/v1`)
-5. Supabase does not require a separate app redeploy, but DB schema must include new fields/tables (handled by backend startup guard here).
-
-`DATABASE_URL` note:
-- On Render, use Supabase **Connection pooling** URL (host like `aws-0-<region>.pooler.supabase.com`, port `6543`).
-- Do not use direct host `db.<project-ref>.supabase.co` on platforms without IPv6 egress.
-- Include `?sslmode=require` in the URL.
-
-## Local Run (example)
-
-From project root:
-
-```bash
-cp .env.example .env
-# fill values in .env
-uvicorn main:app --reload --env-file .env
-```
-
-Then open `index.html` through your static host or local web server.
-
-## Future Improvements Planned
-- Add collection editing (rename, change class name) **(*completed 02/16/26*)**
-- Add collection color coding for easier UI differentiation **(*completed 02/16/26*)**
-- Allow bulk flashcards import/export by collection via JSON **(*completed 02/19/26*)**
-- Generate practice quizzes based on collections
-- Add collection sharing via link between users (requires more complex permissions)
-- Convert login buttons to a single profile button for logging in and out, and showing user info
+* # FlashLearn
+  
+  > The full-stack flashcard app, packaged for instant deployment with Docker.
+  - **Live Website:** [FlashLearn on GitHub Pages](https://the1cyberking.github.io/FlashLearn/)
+  
+  - **Source Code:** [GitHub Repository](https://github.com/The1CyberKing/FlashLearn)
+  
+  ---
+  
+  ## Quick Start: The "One-Click" Docker Run
+  
+  This is the recommended way for users to run FlashLearn locally. You only need **Docker Desktop**.
+  
+  ### 1. Download the Package
+  
+  Clone the repository or download the following files into a single folder:
+  
+  - `docker-compose.yml`
+  
+  - The `frontend` folder (containing `index.html`, `config.js`, etc.)
+  
+  ### 2. Configure Your Secrets
+  
+  In that same folder, create a file named **`.env`** and paste your backend credentials (see the **Supabase Setup** section below).
+  
+  ### 3. Launch
+  
+  Open your terminal in that folder and run:
+  
+  Bash
+  
+  ```
+  docker compose up -d
+  ```
+  
+  *Docker will automatically pull the pre-built "brain" of the app from `the1cyberking/flashlearn-api:v1` and start the web server.*
+  
+  ### 4. Study
+  
+  Open your browser to [http://localhost:8080](https://www.google.com/search?q=http://localhost:8080).
+  
+  ---
+  
+  ## Database Setup (Supabase)
+  
+  FlashLearn uses Supabase to keep your data secure and private. You must connect your own Supabase instance.
+  
+  1. **Create a Project:** Go to [Supabase.com](https://supabase.com) and create a new free project.
+  
+  2. **Get API Keys:** Go to **Project Settings** → **API**. You will need:
+     
+     - `Project URL`
+     
+     - `anon` (public key)
+     
+     - `JWT Secret`
+  
+  3. **Get Database URL:** Go to **Project Settings** → **Database**. Copy the **Transaction Connection String** (Port 6543).
+  
+  4. Add `http://localhost:8000` to the URL Configuration
+  
+  ### What to Edit:
+  
+  #### In your `.env` file (Backend Secrets)
+  
+  USE YOUR OWN POOLER LINK (for `DATABASE_URL`)
+  
+  ```
+  DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres?sslmode=require
+  SUPABASE_URL=https://your-project-id.supabase.co
+  SUPABASE_JWT_SECRET=your-jwt-secret-here
+  ```
+  
+  #### In your `config.js` file (Frontend Links)
+  
+  Open `config.js` and update your frontend to talk to your new database:
+  
+  JavaScript
+  
+  ```
+  SUPABASE_URL: "https://your-project-id.supabase.co",
+  SUPABASE_ANON_KEY: "your-anon-key-here"
+  ```
+  
+  ---
+  
+  ## Features & Functionality
+  
+  This prototype demonstrates the following P0 requirements:
+  
+  - **✅ Collection Management:** Group cards by class or topic with custom color coding.
+  
+  - **✅ Spaced Repetition Quiz:** A dedicated Study Mode that tracks performance.
+  
+  - **✅ Performance Dashboard:** Real-time stats for Accuracy, Mastery, and Cards Due.
+  
+  - **✅ Bulk Import/Export:** Save your collections as `.json` files to share with friends.
+  
+  - **✅ Cross-Platform Sync:** Login with Google to access your cards anywhere.
+  
+  ---
+  
+  ## Alternate Run (Manual Mode)
+  
+  If you wish to modify the Python source code instead of using the Docker image:
+  
+  1. `pip install -r requirements.txt`
+  
+  2. `uvicorn main:app --reload --env-file .env`
+  
+  3. Open `index.html` via a local live server.
+  
+  ---
+  
+  ### Tip for Users
+  
+  If you are running on Docker and change your `.env` file, you must restart the container for changes to take effect:
+  
+  Bash
+  
+  ```
+  docker compose down && docker compose up -d
+  ```
+  
+  ---
+  
+  ## How to use the basic UI & functionality?
+  
+  - Sign up or log in.
+  - Create a collection (optional class name).
+  - Add flashcards (question + answer), optionally assigning each to a collection.
+  - Use the collection filter to view cards by collection or all cards.
+  - Edit or delete flashcards as needed.
+  - Click `Study Mode` to open the quiz page.
+  - Answer quiz prompts and submit to check correctness.
+  - Review dashboard stats:
+    - Total cards
+    - Mastered cards
+    - Accuracy
+    - Reviewed today
+  - Use the refresh/reset progress option to restart study progress for a selected collections.
+  
+  ---
+  
+  ## What P0 functional requirements does this prototype demonstrates?
+  
+  - ✅ Create flashcards:
+    - Users can create new flashcards
+    - Users can add questions and answers to each flashcard
+  - ✅ Edit and delete flashcards:
+    - Users can edit the question or the answer
+    - Delete flashcards users no longer need
+  - ✅ Flip the flashcard to show the answer or the question:
+    - For view of either the question or the answer
+  - ✅ Move to previous or next flashcard:
+    - Navigate through the flashcards
+  - ✅ Display flashcards:
+    - Show the flashcards to the users
