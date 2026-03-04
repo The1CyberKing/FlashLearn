@@ -77,6 +77,7 @@ const noticeModal = document.getElementById("notice-modal");
 const noticeTitle = document.getElementById("notice-title");
 const noticeMessage = document.getElementById("notice-message");
 const noticeOkBtn = document.getElementById("notice-ok-btn");
+const noticeLoginBtn = document.getElementById("notice-login-btn");
 
 const modalOverlays = Array.from(document.querySelectorAll(".modal-overlay"));
 
@@ -749,6 +750,14 @@ function setupNoticeModal() {
             closeModalById("notice-modal");
         });
     }
+
+    if (noticeLoginBtn) {
+        noticeLoginBtn.addEventListener("click", () => {
+            const currentPage = window.location.pathname.split("/").pop() || "index.html";
+            const nextPath = `${currentPage}${window.location.search || ""}${window.location.hash || ""}`;
+            window.location.href = `login.html?next=${encodeURIComponent(nextPath)}`;
+        });
+    }
 }
 
 function setupImportExportControls() {
@@ -841,13 +850,16 @@ function setupKeyboardShortcuts() {
     });
 }
 
-function showNoticeModal(title, message) {
+function showNoticeModal(title, message, options = {}) {
     if (!noticeModal || !noticeTitle || !noticeMessage) {
         alert(message || title || "Notice");
         return;
     }
     noticeTitle.textContent = title || "Notice";
     noticeMessage.textContent = message || "";
+    if (noticeLoginBtn) {
+        noticeLoginBtn.hidden = !options.showLoginButton;
+    }
     openModal(noticeModal);
 }
 
@@ -1110,7 +1122,11 @@ function openEditCollectionModal() {
 function openCollectionModal(mode = "create", selectedCollection = null) {
     if (!collectionModal || !collectionNameInput || !collectionClassInput || !collectionColorInput) return;
     if (!hasValidToken()) {
-        showNoticeModal("Sign In Required", "You must be logged in to add a collection.");
+        showNoticeModal(
+            "Sign In Required",
+            "You must be logged in to add a collection.",
+            { showLoginButton: true }
+        );
         return;
     }
 
@@ -1304,7 +1320,11 @@ function openAddCardModal() {
     if (!addCardModal || !addCardQuestionInput || !addCardAnswerInput) return;
 
     if (!hasValidToken()) {
-        showNoticeModal("Sign In Required", "You must be logged in to add a card.");
+        showNoticeModal(
+            "Sign In Required",
+            "You must be logged in to add a card.",
+            { showLoginButton: true }
+        );
         return;
     }
 
@@ -1349,7 +1369,11 @@ async function saveFlashcard(question, answer, errorElement = null) {
         if (errorElement) {
             setModalError(errorElement, "You must be logged in to add a card.");
         } else {
-            showNoticeModal("Sign In Required", "You must be logged in to add a card.");
+            showNoticeModal(
+                "Sign In Required",
+                "You must be logged in to add a card.",
+                { showLoginButton: true }
+            );
         }
         return false;
     }
