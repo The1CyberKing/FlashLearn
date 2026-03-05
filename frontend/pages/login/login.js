@@ -1,11 +1,22 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
-const SUPABASE_URL = "https://sfxtsemiitbruxmdurva.supabase.co";
-const SUPABASE_ANON_KEY =
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmeHRzZW1paXRicnV4bWR1cnZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMjE3NjcsImV4cCI6MjA4NTg5Nzc2N30.M4ErTSvcEIezdt72o-DBYFONe5l9UWWoQYGy2-HkaeA";
+const core = window.FlashLearnCore;
+if (!core) {
+    throw new Error("FlashLearnCore failed to load.");
+}
+
+const {
+    CONFIG,
+    bindAuthStateListener,
+    bootstrapSession,
+    buildGoogleAuthorizeUrl,
+    resolveSafeNextPath,
+    setStoredToken,
+    setWelcomeAfterAuthFlag,
+} = core;
 const DEFAULT_NEXT_PATH = "../study/index.html";
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 
 const providerButtons = Array.from(document.querySelectorAll("[data-provider]"));
 const googleLoginButton = document.getElementById("google-login-btn");
@@ -15,106 +26,16 @@ if (!loginError) {
     console.warn('No #login-error element found in DOM.');
 }
 
-function setStoredToken(session) {
-    if (session?.access_token) {
-        localStorage.setItem("userToken", session.access_token);
-        return;
-    }
-    localStorage.removeItem("userToken");
-}
-
-function resolveNextPath() {
-    const defaultResolved = new URL(DEFAULT_NEXT_PATH, window.location.href);
-    const defaultNextPath = `${defaultResolved.pathname}${defaultResolved.search}${defaultResolved.hash}`;
-    const legacyNextMap = {
-        "index.html": DEFAULT_NEXT_PATH,
-        "/index.html": DEFAULT_NEXT_PATH,
-        "quiz.html": "../quiz/quiz.html",
-        "/quiz.html": "../quiz/quiz.html",
-        "profile.html": "../profile/profile.html",
-        "/profile.html": "../profile/profile.html",
-        "login.html": "../login/login.html",
-        "/login.html": "../login/login.html",
-    };
-
-    const params = new URLSearchParams(window.location.search);
-    const rawNext = params.get("next");
-    const normalizedNext = legacyNextMap[rawNext] || rawNext;
-
-    if (!normalizedNext) {
-        return defaultNextPath;
-    }
-
-    try {
-        const resolved = new URL(normalizedNext, window.location.href);
-        if (resolved.origin !== window.location.origin) {
-            return defaultNextPath;
-        }
-
-        const nextPath = `${resolved.pathname}${resolved.search}${resolved.hash}`;
-        if (!nextPath || nextPath === "/" || nextPath.endsWith("/login.html") || nextPath.endsWith("login.html")) {
-            return defaultNextPath;
-        }
-        return nextPath;
-    } catch (_error) {
-        return defaultNextPath;
-    }
-}
-
-const nextPath = resolveNextPath();
+const rawNext = new URLSearchParams(window.location.search).get("next");
+const nextPath = resolveSafeNextPath(rawNext, DEFAULT_NEXT_PATH);
 
 function redirectToNext() {
     window.location.replace(nextPath);
 }
 
-function getHashParamValue(hashContent, key) {
-    const regex = new RegExp(`${key}=([^&#]+)`, "g");
-    const matches = Array.from(hashContent.matchAll(regex));
-    if (matches.length === 0) {
-        return null;
-    }
-
-    const lastMatch = matches[matches.length - 1];
-    return decodeURIComponent(lastMatch[1]);
-}
-
-function readTokensFromHash() {
-    const hash = window.location.hash.startsWith("#")
-        ? window.location.hash.slice(1)
-        : window.location.hash;
-
-    if (!hash) {
-        return null;
-    }
-
-    const accessToken = getHashParamValue(hash, "access_token");
-    const refreshToken = getHashParamValue(hash, "refresh_token");
-
-    if (!accessToken || !refreshToken) {
-        return null;
-    }
-
-    return { accessToken, refreshToken };
-}
-
-function clearUrlHash() {
-    const cleanedUrl = `${window.location.pathname}${window.location.search}`;
-    window.history.replaceState({}, document.title, cleanedUrl);
-}
-
-function buildGoogleAuthorizeUrl() {
-    const loginReturnUrl = new URL(nextPath, window.location.origin);
-    loginReturnUrl.hash = "";
-
-    const authorizeUrl = new URL(`${SUPABASE_URL}/auth/v1/authorize`);
-    authorizeUrl.searchParams.set("provider", "google");
-    authorizeUrl.searchParams.set("redirect_to", loginReturnUrl.toString());
-    return authorizeUrl.toString();
-}
-
 function startGoogleAuth() {
     if (loginError) loginError.textContent = "";
-    sessionStorage.setItem("showWelcomeAfterAuth", "1");
+    setWelcomeAfterAuthFlag(true);
 
     if (window.location.protocol === "file:") {
         const protocolMessage = "Google sign-in requires http://localhost or https://, not file://.";
@@ -123,7 +44,7 @@ function startGoogleAuth() {
     }
 
     try {
-        const authorizeUrl = buildGoogleAuthorizeUrl();
+        const authorizeUrl = buildGoogleAuthorizeUrl(nextPath);
         window.location.assign(authorizeUrl);
     } catch (error) {
         const message = error?.message || "Could not start Google sign in.";
@@ -132,44 +53,28 @@ function startGoogleAuth() {
 }
 
 async function bootstrapLoginPage() {
-    const tokens = readTokensFromHash();
-    if (tokens) {
-        try {
-            const { data, error } = await supabase.auth.setSession({
-                access_token: tokens.accessToken,
-                refresh_token: tokens.refreshToken,
-            });
-
-            if (error) {
-                throw error;
+    let callbackHydrationError = null;
+    const { session } = await bootstrapSession(supabase, {
+        hydrateHashTokens: true,
+        onHydrationError: (error, callbackTokens) => {
+            callbackHydrationError = error;
+            if (callbackTokens?.accessToken) {
+                localStorage.setItem("userToken", callbackTokens.accessToken);
+                setWelcomeAfterAuthFlag(true);
             }
+        },
+    });
 
-            setStoredToken(data?.session || null);
-            sessionStorage.setItem("showWelcomeAfterAuth", "1");
-            clearUrlHash();
-            redirectToNext();
-            return;
-        } catch (error) {
-            localStorage.setItem("userToken", tokens.accessToken);
-            sessionStorage.setItem("showWelcomeAfterAuth", "1");
-            clearUrlHash();
-            const message = error?.message || "Could not complete sign in from callback.";
-            if (loginNote) {
-                loginNote.textContent = `Continuing with token fallback (${message}).`;
-            }
-            redirectToNext();
-            return;
+    if (callbackHydrationError) {
+        const message = callbackHydrationError?.message || "Could not complete sign in from callback.";
+        if (loginNote) {
+            loginNote.textContent = `Continuing with token fallback (${message}).`;
         }
-    }
-
-    const { data, error } = await supabase.auth.getSession();
-    if (error) {
-        setStoredToken(null);
+        redirectToNext();
         return;
     }
 
-    if (data?.session?.user) {
-        setStoredToken(data?.session || null);
+    if (session?.user) {
         redirectToNext();
         return;
     }
@@ -229,11 +134,12 @@ function wireProviderButtons() {
     });
 }
 
-supabase.auth.onAuthStateChange((_event, session) => {
-    setStoredToken(session);
-    if (session?.user) {
-        redirectToNext();
-    }
+bindAuthStateListener(supabase, {
+    onChange: (_event, session) => {
+        if (session?.user) {
+            redirectToNext();
+        }
+    },
 });
 
 bootstrapLoginPage().catch(() => {

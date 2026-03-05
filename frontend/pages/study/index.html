@@ -1,148 +1,29 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script src="../../shared/js/app-core.js"></script>
     <script type="module">
     import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
-    const SUPABASE_URL = "https://sfxtsemiitbruxmdurva.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmeHRzZW1paXRicnV4bWR1cnZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMjE3NjcsImV4cCI6MjA4NTg5Nzc2N30.M4ErTSvcEIezdt72o-DBYFONe5l9UWWoQYGy2-HkaeA";
-    const AVATAR_PRESET_KEY = "flashlearnAvatarPreset";
-    const AVATAR_PRESETS = {
-        fox: { emoji: "🦊", background: "linear-gradient(160deg, #ffd7ad, #f1a35f)" },
-        owl: { emoji: "🦉", background: "linear-gradient(160deg, #e5d6ff, #bca8f1)" },
-        panda: { emoji: "🐼", background: "linear-gradient(160deg, #e4eef5, #bdd0de)" },
-        whale: { emoji: "🐋", background: "linear-gradient(160deg, #c7ebff, #8fc3e7)" },
-        cat: { emoji: "🐱", background: "linear-gradient(160deg, #ffe2cf, #f4b28c)" },
-    };
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    function setStoredToken(session) {
-        if (session?.access_token) {
-            localStorage.setItem("userToken", session.access_token);
-            return;
-        }
-        localStorage.removeItem("userToken");
+    const core = window.FlashLearnCore;
+    if (!core) {
+        throw new Error("FlashLearnCore failed to load.");
     }
 
-    function getDisplayName(user) {
-        const metadata = user?.user_metadata || {};
-        return (
-            metadata.full_name ||
-            metadata.name ||
-            user?.email ||
-            "Learner"
-        );
-    }
+    const { CONFIG, bindAuthStateListener, bootstrapSession, signInWithGoogle, signOutSession } = core;
+    const supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 
-    function getInitials(displayName) {
-        const parts = (displayName || "").trim().split(/\s+/).filter(Boolean);
-        if (parts.length === 0) return "FL";
-        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-        return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-    }
-
-    function syncHeaderAvatar(user) {
-        const avatarBadge = document.getElementById("header-profile-avatar");
-        if (!avatarBadge) return;
-
-        avatarBadge.classList.remove("has-photo", "avatar-custom");
-        avatarBadge.style.background = "";
-        avatarBadge.style.backgroundImage = "";
-
-        const selectedPreset = localStorage.getItem(AVATAR_PRESET_KEY) || "google";
-        if (selectedPreset !== "google" && AVATAR_PRESETS[selectedPreset]) {
-            const preset = AVATAR_PRESETS[selectedPreset];
-            avatarBadge.classList.add("avatar-custom");
-            avatarBadge.textContent = preset.emoji;
-            avatarBadge.style.background = preset.background;
-            return;
-        }
-
-        const displayName = getDisplayName(user);
-        const metadata = user?.user_metadata || {};
-        const avatarUrl = metadata.avatar_url || metadata.picture || "";
-
-        if (avatarUrl) {
-            const safeUrl = avatarUrl.replace(/"/g, "%22");
-            avatarBadge.classList.add("has-photo");
-            avatarBadge.textContent = "";
-            avatarBadge.style.backgroundImage = `url("${safeUrl}")`;
-            return;
-        }
-
-        avatarBadge.textContent = getInitials(displayName);
-    }
-
-    function readTokensFromHash() {
-        const hash = window.location.hash.startsWith("#")
-            ? window.location.hash.slice(1)
-            : window.location.hash;
-        if (!hash) return null;
-
-        const params = new URLSearchParams(hash);
-        const accessToken = params.get("access_token");
-        const refreshToken = params.get("refresh_token");
-        if (!accessToken || !refreshToken) return null;
-        return { accessToken, refreshToken };
-    }
-
-    function clearHash() {
-        const cleanUrl = `${window.location.pathname}${window.location.search}`;
-        window.history.replaceState({}, document.title, cleanUrl);
-    }
-
-    async function syncSession() {
-        const callbackTokens = readTokensFromHash();
-        if (callbackTokens) {
-            try {
-                await supabase.auth.setSession({
-                    access_token: callbackTokens.accessToken,
-                    refresh_token: callbackTokens.refreshToken,
-                });
-            } catch (callbackError) {
-                console.error("Failed to hydrate auth callback:", callbackError);
-            } finally {
-                clearHash();
-            }
-        }
-
-        const { data, error } = await supabase.auth.getSession();
-        if (error) {
-            console.error("Failed to read Supabase session:", error);
-            localStorage.removeItem("userToken");
-            return;
-        }
-
-        setStoredToken(data.session);
-        syncHeaderAvatar(data.session?.user || null);
-
-        const shouldShowWelcome = sessionStorage.getItem("showWelcomeAfterAuth") === "1";
-        if (shouldShowWelcome && data.session?.user) {
-            window.pendingWelcomeUserName =
-                data.session.user.user_metadata?.full_name ||
-                data.session.user.user_metadata?.name ||
-                data.session.user.email ||
-                "Learner";
-        }
-        sessionStorage.removeItem("showWelcomeAfterAuth");
-    }
-
-    window.authReady = syncSession();
-
-    supabase.auth.onAuthStateChange((_event, session) => {
-        setStoredToken(session);
-        syncHeaderAvatar(session?.user || null);
+    window.authReady = bootstrapSession(supabase, {
+        hydrateHashTokens: true,
+        syncAvatar: true,
+        captureWelcomeUserName: true,
+        onSessionError: (error) => console.error("Failed to read Supabase session:", error),
     });
 
-    window.login = async () => {
-        sessionStorage.setItem("showWelcomeAfterAuth", "1");
-        const { error } = await supabase.auth.signInWithOAuth({
-            provider: "google",
-            options: {
-                redirectTo: `${window.location.origin}${window.location.pathname}`,
-            },
-        });
+    bindAuthStateListener(supabase, { syncAvatar: true });
 
+    window.login = async () => {
+        const { error } = await signInWithGoogle(supabase, { showWelcomeAfterAuth: true });
         if (error) {
             console.error(error);
             alert("Login failed");
@@ -150,14 +31,15 @@
     };
 
     window.logout = async () => {
-        const { error } = await supabase.auth.signOut();
+        const { error } = await signOutSession(supabase, {
+            syncAvatar: true,
+            clearWelcomeAfterAuth: true,
+            clearPendingWelcomeUserName: true,
+            reloadPage: true,
+        });
         if (error) {
             console.error("Logout failed:", error);
         }
-        localStorage.removeItem("userToken");
-        sessionStorage.removeItem("showWelcomeAfterAuth");
-        window.pendingWelcomeUserName = null;
-        location.reload();
     };
     </script>
     <meta charset="UTF-8">

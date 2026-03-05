@@ -1,21 +1,17 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
-const SUPABASE_URL = "https://sfxtsemiitbruxmdurva.supabase.co";
-const SUPABASE_ANON_KEY =
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmeHRzZW1paXRicnV4bWR1cnZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMjE3NjcsImV4cCI6MjA4NTg5Nzc2N30.M4ErTSvcEIezdt72o-DBYFONe5l9UWWoQYGy2-HkaeA";
-const API_URL = "https://flashcardapp-pwic.onrender.com";
-const LOGIN_REDIRECT_BASE = "../login/login.html";
-const AVATAR_PRESET_KEY = "flashlearnAvatarPreset";
-const AVATAR_PRESETS = {
-    google: { emoji: "G", background: "linear-gradient(160deg, #dbe8ff, #bdd9f1)" },
-    fox: { emoji: "🦊", background: "linear-gradient(160deg, #ffd7ad, #f1a35f)" },
-    owl: { emoji: "🦉", background: "linear-gradient(160deg, #e5d6ff, #bca8f1)" },
-    panda: { emoji: "🐼", background: "linear-gradient(160deg, #e4eef5, #bdd0de)" },
-    whale: { emoji: "🐋", background: "linear-gradient(160deg, #c7ebff, #8fc3e7)" },
-    cat: { emoji: "🐱", background: "linear-gradient(160deg, #ffe2cf, #f4b28c)" },
-};
+const core = window.FlashLearnCore;
+if (!core) {
+    throw new Error("FlashLearnCore failed to load.");
+}
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const { CONFIG, bindAuthStateListener, getDisplayName, setStoredToken, signOutSession } = core;
+const API_URL = CONFIG.API_URL;
+const LOGIN_REDIRECT_BASE = "../login/login.html";
+const AVATAR_PRESET_KEY = CONFIG.AVATAR_PRESET_KEY;
+const AVATAR_PRESETS = CONFIG.AVATAR_PRESETS;
+
+const supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 
 const profileMain = document.getElementById("profile-main");
 const profileStatus = document.getElementById("profile-status");
@@ -37,14 +33,6 @@ const avatarPicker = document.getElementById("avatar-picker");
 
 let currentAvatarUrl = "";
 let currentInitials = "FL";
-
-function setStoredToken(session) {
-    if (session?.access_token) {
-        localStorage.setItem("userToken", session.access_token);
-        return;
-    }
-    localStorage.removeItem("userToken");
-}
 
 function formatMemberSince(createdAtValue) {
     if (!createdAtValue) {
@@ -94,17 +82,6 @@ function splitName(displayName, metadata) {
         firstName: parts[0],
         lastName: parts.slice(1).join(" "),
     };
-}
-
-function getDisplayName(user) {
-    const metadata = user?.user_metadata || {};
-    return (
-        metadata.full_name ||
-        metadata.name ||
-        [metadata.given_name, metadata.family_name].filter(Boolean).join(" ") ||
-        user?.email?.split("@")[0] ||
-        "Learner"
-    );
 }
 
 async function getTotalFlashcardCount(accessToken) {
@@ -288,19 +265,19 @@ async function initializeProfile() {
     redirectToLogin();
 }
 
-supabase.auth.onAuthStateChange((event, session) => {
-    setStoredToken(session);
-    if (event === "SIGNED_OUT") {
-        redirectToLogin();
-    }
+bindAuthStateListener(supabase, {
+    onChange: (event) => {
+        if (event === "SIGNED_OUT") {
+            redirectToLogin();
+        }
+    },
 });
 
 logoutButton.addEventListener("click", async () => {
     logoutButton.disabled = true;
     try {
-        await supabase.auth.signOut();
+        await signOutSession(supabase);
     } finally {
-        setStoredToken(null);
         redirectToLogin();
     }
 });

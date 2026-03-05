@@ -1,4 +1,10 @@
-const API_URL = "https://flashcardapp-pwic.onrender.com";
+const core = window.FlashLearnCore;
+if (!core) {
+    throw new Error("FlashLearnCore failed to load.");
+}
+
+const { CONFIG, getHeaders, hasValidToken } = core;
+const API_URL = CONFIG.API_URL;
 const REVIEW_RATINGS = ["again", "hard", "good", "easy"];
 
 let collections = [];
@@ -49,19 +55,6 @@ async function waitForAuthBootstrap() {
             console.error("Auth bootstrap failed:", error);
         }
     }
-}
-
-function getHeaders() {
-    const token = localStorage.getItem("userToken");
-    return {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
-    };
-}
-
-function hasValidToken() {
-    const token = localStorage.getItem("userToken");
-    return Boolean(token && token.startsWith("ey"));
 }
 
 function toNonNegativeInteger(value, fallback = 0) {
