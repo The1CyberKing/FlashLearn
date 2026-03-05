@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="../../shared/js/app-core.js"></script>
+    <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+    const core = window.FlashLearnCore;
+    if (!core) {
+        throw new Error("FlashLearnCore failed to load.");
+    }
+
+    const { CONFIG, bindAuthStateListener, bootstrapSession, signInWithGoogle, signOutSession } = core;
+    const supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+
+    window.authReady = bootstrapSession(supabase, {
+        syncAvatar: true,
+        onSessionError: (error) => console.error("Failed to read Supabase session:", error),
+    });
+
+    bindAuthStateListener(supabase, { syncAvatar: true });
+
+    window.login = async () => {
+        const { error } = await signInWithGoogle(supabase);
+        if (error) {
+            console.error(error);
+            window.dispatchEvent(new CustomEvent("flashlearn:auth-error", {
+                detail: { message: "Could not start sign in. Please try again." },
+            }));
+        }
+    };
+
+    window.logout = async () => {
+        const { error } = await signOutSession(supabase, {
+            syncAvatar: true,
+            reloadPage: true,
+        });
+        if (error) {
+            console.error("Logout failed:", error);
+        }
+    };
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlashLearn Collection</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="collection.css">
+</head>
+<body>
+    <div class="auth-controls">
+        <button
+            id="profile-menu-trigger"
+            class="profile-trigger"
+            type="button"
+            aria-label="Open profile menu"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-controls="profile-menu"
+        >
+            <span id="header-profile-avatar" class="profile-avatar" aria-hidden="true">FL</span>
+            <svg class="profile-caret" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M4.22 6.72a.75.75 0 0 1 1.06 0L8 9.44l2.72-2.72a.75.75 0 0 1 1.06 1.06L8.53 11.03a.75.75 0 0 1-1.06 0L4.22 7.78a.75.75 0 0 1 0-1.06z"/>
+            </svg>
+            <span class="sr-only">Open profile menu</span>
+        </button>
+        <div id="profile-menu" class="profile-menu" role="menu" aria-label="Profile menu" hidden>
+            <a class="profile-menu-item" role="menuitem" data-profile-link href="../login/login.html?next=../quiz/collection.html">Profile</a>
+            <button class="profile-menu-item profile-menu-item-danger" type="button" role="menuitem" onclick="logout()">
+                Log Out
+            </button>
+        </div>
+    </div>
+
+    <main class="collection-shell">
+        <header class="collection-topbar">
+            <a href="./quiz.html" class="back-link">&#8592; Back</a>
+            <div class="collection-actions">
+                <button id="manage-set-btn" type="button" class="ghost-btn">Manage in Study</button>
+                <button id="delete-set-btn" type="button" class="danger-btn">Delete</button>
+            </div>
+        </header>
+
+        <section class="hero">
+            <h1 id="collection-title">Loading collection...</h1>
+            <p id="collection-subtitle" class="hero-subtitle">Preparing your study overview.</p>
+
+            <div class="hero-meta">
+                <span id="collection-card-count">0 cards</span>
+                <span id="collection-class-name">Class: -</span>
+            </div>
+
+            <div class="mastery-row">
+                <p>Overall Mastery</p>
+                <strong id="collection-mastery-value">0%</strong>
+            </div>
+            <div class="mastery-track" aria-hidden="true">
+                <div id="collection-mastery-fill" class="mastery-fill"></div>
+            </div>
+
+            <button id="start-study-btn" type="button" class="start-btn">Start Studying</button>
+            <p id="collection-status" class="collection-status" aria-live="polite"></p>
+        </section>
+
+        <section class="cards-section" aria-label="Cards in this set">
+            <h2>Cards in this set</h2>
+            <div id="cards-list" class="cards-list"></div>
+            <p id="cards-empty" class="cards-empty is-hidden"></p>
+        </section>
+    </main>
+
+    <div id="confirm-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+            <h2 id="confirm-title">Delete this collection?</h2>
+            <p id="confirm-message">Cards will remain but become uncategorized.</p>
+            <div class="modal-actions">
+                <button id="confirm-cancel" type="button" class="ghost-btn">Cancel</button>
+                <button id="confirm-accept" type="button" class="danger-btn">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../../shared/components/profile-menu/profile-menu.js"></script>
+    <script src="collection.js"></script>
+</body>
+</html>

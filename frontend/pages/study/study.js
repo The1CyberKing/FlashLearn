@@ -7,6 +7,7 @@ if (!core) {
 const { CONFIG, getHeaders, hasValidToken } = core;
 const API_URL = CONFIG.API_URL;
 const DEFAULT_COLLECTION_COLOR = CONFIG.DEFAULT_COLLECTION_COLOR;
+const BACKGROUND_MODE_STORAGE_KEY = "flashlearn.background.mode";
 
 let flashcards = [];
 let allFlashcards = [];
@@ -32,6 +33,7 @@ const deleteCollectionButton = document.getElementById("delete-collection-btn");
 const exportCollectionButton = document.getElementById("export-collection-btn");
 const importCollectionButton = document.getElementById("import-collection-btn");
 const importCollectionFileInput = document.getElementById("import-collection-file");
+const backgroundToggleButton = document.getElementById("background-toggle-btn");
 
 const addCardModal = document.getElementById("add-card-modal");
 const addCardForm = document.getElementById("add-card-form");
@@ -492,8 +494,57 @@ function renderCollectionOptions() {
     renderCollectionTree();
 }
 
+function readBackgroundModePreference() {
+    try {
+        const storedMode = window.localStorage.getItem(BACKGROUND_MODE_STORAGE_KEY);
+        if (storedMode === "dynamic" || storedMode === "static") {
+            return storedMode;
+        }
+    } catch (error) {
+        console.warn("Unable to read background mode preference:", error);
+    }
+    return "static";
+}
+
+function writeBackgroundModePreference(mode) {
+    try {
+        window.localStorage.setItem(BACKGROUND_MODE_STORAGE_KEY, mode);
+    } catch (error) {
+        console.warn("Unable to save background mode preference:", error);
+    }
+}
+
+function applyBackgroundMode(mode) {
+    const isDynamic = mode === "dynamic";
+    document.body.classList.toggle("dynamic-bg", isDynamic);
+
+    if (!backgroundToggleButton) return;
+    backgroundToggleButton.classList.toggle("dynamic", isDynamic);
+    backgroundToggleButton.dataset.mode = isDynamic ? "dynamic" : "static";
+    backgroundToggleButton.title = isDynamic ? "Dynamic background on" : "Static background on";
+    backgroundToggleButton.setAttribute("aria-pressed", String(isDynamic));
+    backgroundToggleButton.setAttribute(
+        "aria-label",
+        isDynamic ? "Switch to static background" : "Switch to dynamic background"
+    );
+}
+
+function setupBackgroundModeToggle() {
+    const preferredMode = readBackgroundModePreference();
+    applyBackgroundMode(preferredMode);
+
+    if (!backgroundToggleButton) return;
+    backgroundToggleButton.addEventListener("click", () => {
+        const isDynamic = document.body.classList.contains("dynamic-bg");
+        const nextMode = isDynamic ? "static" : "dynamic";
+        applyBackgroundMode(nextMode);
+        writeBackgroundModePreference(nextMode);
+    });
+}
+
 async function initializeApp() {
     await waitForAuthBootstrap();
+    setupBackgroundModeToggle();
     setupModalInfrastructure();
     setupAddCardModal();
     setupCollectionModal();

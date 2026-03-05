@@ -70,6 +70,19 @@ body::after {
     background: radial-gradient(circle, rgba(189, 139, 59, 0.22), rgba(189, 139, 59, 0));
 }
 
+body.dynamic-bg::before,
+body.dynamic-bg::after {
+    will-change: transform;
+}
+
+body.dynamic-bg::before {
+    animation: driftOrbOne 18s ease-in-out infinite alternate;
+}
+
+body.dynamic-bg::after {
+    animation: driftOrbTwo 22s ease-in-out infinite alternate;
+}
+
 .auth-controls {
     position: fixed;
     top: 24px;
@@ -192,6 +205,64 @@ body::after {
 
 .profile-menu-item-danger {
     color: #8f2f1f;
+}
+
+.background-toggle-btn {
+    position: fixed;
+    top: 24px;
+    left: 24px;
+    z-index: 6;
+    width: 70px;
+    height: 42px;
+    padding: 0;
+    border-radius: 999px;
+    border: 1px solid rgba(95, 86, 76, 0.3);
+    background: linear-gradient(135deg, #efe4d2, #dcc8aa);
+    box-shadow: 0 12px 24px rgba(45, 35, 24, 0.24);
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    overflow: hidden;
+    transition: background 0.26s ease, box-shadow 0.26s ease, border-color 0.26s ease;
+}
+
+.background-toggle-btn:hover {
+    transform: none;
+    filter: none;
+    border-color: rgba(189, 139, 59, 0.6);
+    box-shadow: 0 14px 26px rgba(45, 35, 24, 0.28);
+}
+
+.background-toggle-btn.dynamic {
+    border-color: rgba(15, 76, 92, 0.62);
+    background: linear-gradient(135deg, #62b8a3, var(--brand));
+}
+
+.background-toggle-btn.dynamic:hover {
+    border-color: rgba(8, 62, 77, 0.78);
+}
+
+.background-toggle-btn:active {
+    transform: none;
+}
+
+.background-toggle-btn:focus-visible {
+    outline: 3px solid rgba(15, 76, 92, 0.35);
+    outline-offset: 3px;
+}
+
+.background-toggle-thumb {
+    width: 30px;
+    height: 30px;
+    margin-left: 4px;
+    border-radius: 50%;
+    background: #fff8ed;
+    box-shadow: 0 8px 16px rgba(35, 27, 19, 0.26);
+    transition: transform 0.26s ease;
+}
+
+.background-toggle-btn.dynamic .background-toggle-thumb {
+    transform: translateX(32px);
 }
 
 .sr-only {
@@ -952,6 +1023,23 @@ button:active {
         align-items: flex-start;
     }
 
+    .background-toggle-btn {
+        top: 14px;
+        left: 14px;
+        width: 62px;
+        height: 40px;
+    }
+
+    .background-toggle-thumb {
+        width: 28px;
+        height: 28px;
+        margin-left: 3px;
+    }
+
+    .background-toggle-btn.dynamic .background-toggle-thumb {
+        transform: translateX(28px);
+    }
+
     .auth-controls {
         top: 14px;
         right: 14px;
@@ -1087,4 +1175,27 @@ button:active {
     0% { transform: scale(1); opacity: 1; }
     45% { transform: scale(1.06) translateY(-6px); opacity: 0.82; }
     100% { transform: scale(0.82) translateY(18px); opacity: 0; }
+}
+
+@keyframes driftOrbOne {
+    0% { transform: translate3d(0, 0, 0) scale(1); }
+    25% { transform: translate3d(-18vw, 10vh, 0) scale(1.04); }
+    50% { transform: translate3d(-34vw, 28vh, 0) scale(0.98); }
+    75% { transform: translate3d(-15vw, 48vh, 0) scale(1.03); }
+    100% { transform: translate3d(-5vw, 22vh, 0) scale(1); }
+}
+
+@keyframes driftOrbTwo {
+    0% { transform: translate3d(0, 0, 0) scale(1); }
+    25% { transform: translate3d(14vw, -10vh, 0) scale(1.03); }
+    50% { transform: translate3d(32vw, -30vh, 0) scale(0.97); }
+    75% { transform: translate3d(20vw, -50vh, 0) scale(1.02); }
+    100% { transform: translate3d(7vw, -20vh, 0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body.dynamic-bg::before,
+    body.dynamic-bg::after {
+        animation: none;
+    }
 }

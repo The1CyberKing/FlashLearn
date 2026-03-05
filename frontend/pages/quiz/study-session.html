@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="../../shared/js/app-core.js"></script>
+    <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+    const core = window.FlashLearnCore;
+    if (!core) {
+        throw new Error("FlashLearnCore failed to load.");
+    }
+
+    const { CONFIG, bootstrapSession, bindAuthStateListener, signInWithGoogle, signOutSession } = core;
+    const supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+
+    window.authReady = bootstrapSession(supabase, {
+        syncAvatar: false,
+        onSessionError: (error) => console.error("Failed to read Supabase session:", error),
+    });
+
+    bindAuthStateListener(supabase, { syncAvatar: false });
+
+    window.login = async () => {
+        const { error } = await signInWithGoogle(supabase);
+        if (error) {
+            console.error(error);
+            window.dispatchEvent(new CustomEvent("flashlearn:auth-error", {
+                detail: { message: "Could not start sign in. Please try again." },
+            }));
+        }
+    };
+
+    window.logout = async () => {
+        const { error } = await signOutSession(supabase, { reloadPage: true });
+        if (error) {
+            console.error("Logout failed:", error);
+        }
+    };
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlashLearn Study Session</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="study-session.css">
+</head>
+<body>
+    <main class="session-shell">
+        <header class="session-topbar">
+            <a id="back-link" href="./collection.html" class="back-link">&#8592; Back</a>
+            <h1 id="session-title">Collection</h1>
+            <div class="session-actions">
+                <button id="restart-btn" type="button" class="ghost-btn">Restart</button>
+                <button id="login-btn" type="button" class="ghost-btn is-hidden">Log In</button>
+            </div>
+        </header>
+
+        <section class="session-meta">
+            <p id="session-card-count">Card 0 of 0</p>
+            <p id="session-stats">0 known · 0 reviewed</p>
+        </section>
+
+        <div class="progress-track" aria-hidden="true">
+            <div id="progress-fill" class="progress-fill"></div>
+        </div>
+
+        <section id="card-stage" class="card-stage">
+            <button id="flashcard" type="button" class="flashcard" aria-label="Flashcard. Press to flip.">
+                <div id="card-inner" class="card-inner">
+                    <article class="card-face card-front">
+                        <p id="card-side-label" class="card-side-label">TERM</p>
+                        <h2 id="card-primary-text">Loading...</h2>
+                        <p class="card-hint">Click to flip</p>
+                    </article>
+                    <article class="card-face card-back">
+                        <p class="card-side-label">DEFINITION</p>
+                        <h2 id="card-secondary-text">...</h2>
+                        <p class="card-hint">Click to flip</p>
+                    </article>
+                </div>
+            </button>
+        </section>
+
+        <section class="session-controls">
+            <button id="prev-btn" type="button" class="nav-btn" aria-label="Previous card">&#8592;</button>
+            <button id="again-btn" type="button" class="rating-btn rating-again">Still Learning</button>
+            <button id="easy-btn" type="button" class="rating-btn rating-easy">Got It!</button>
+            <button id="next-btn" type="button" class="nav-btn" aria-label="Next card">&#8594;</button>
+        </section>
+
+        <div id="complete-wrap" class="complete-wrap is-hidden">
+            <button id="complete-btn" type="button" class="complete-btn">Complete Study Session</button>
+        </div>
+
+        <section class="card-rail" aria-label="All cards">
+            <h2>All Cards</h2>
+            <div id="card-rail-list" class="card-rail-list"></div>
+        </section>
+
+        <p id="session-status" class="session-status" aria-live="polite"></p>
+    </main>
+    <script src="study-session.js"></script>
+</body>
+</html>

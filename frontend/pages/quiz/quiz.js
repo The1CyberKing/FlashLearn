@@ -5,7 +5,7 @@ if (!core) {
 
 const { CONFIG, getHeaders, hasValidToken } = core;
 const API_URL = CONFIG.API_URL;
-const REVIEW_RATINGS = ["again", "hard", "good", "easy"];
+const REVIEW_RATINGS = ["again", "easy"];
 
 let collections = [];
 let allCards = [];
@@ -13,7 +13,6 @@ let filteredCards = [];
 let activeCollection = "all";
 let currentIndex = 0;
 let collectionSearchTerm = "";
-const quizAttemptsByCard = new Map();
 
 const collectionSelect = document.getElementById("quiz-collection-select");
 const collectionSearchInput = document.getElementById("quiz-search-input");
@@ -89,21 +88,11 @@ function hasBeenReviewedRecently(date) {
     return diffMs <= 1000 * 60 * 60 * 24 * 7;
 }
 
-function getCardAccuracy(card) {
+function getCardMasteryScore(card) {
     const reviews = toNonNegativeInteger(card?.review_count, 0);
-    if (reviews <= 0) return null;
-    const correct = toNonNegativeInteger(card?.correct_count, 0);
+    if (reviews <= 0) return 0;
+    const correct = Math.min(reviews, toNonNegativeInteger(card?.correct_count, 0));
     return correct / reviews;
-}
-
-function isCardMastered(card) {
-    const accuracy = getCardAccuracy(card);
-    return Boolean(
-        accuracy !== null
-        && accuracy >= 0.85
-        && toNonNegativeInteger(card?.review_count, 0) >= 1
-        && toNonNegativeInteger(card?.interval_days, 0) >= 2
-    );
 }
 
 function normalizeCardPayload(card) {
@@ -145,8 +134,8 @@ function getVisibleCards() {
 
 function getMasteryPercent(cards) {
     if (!cards.length) return 0;
-    const masteredCount = cards.filter((card) => isCardMastered(card)).length;
-    return Math.round((masteredCount / cards.length) * 100);
+    const scoreSum = cards.reduce((sum, card) => sum + getCardMasteryScore(card), 0);
+    return Math.round((scoreSum / cards.length) * 100);
 }
 
 function getReviewedTodayCount(cards) {
@@ -334,11 +323,13 @@ function createCollectionCard(collection) {
                 <div class="collection-progress-fill" style="width: ${masteryPercent}%"></div>
             </div>
         </div>
-        <span class="collection-card-action">Start Quiz &#8594;</span>
+        <span class="collection-card-action">Open Set &#8594;</span>
     `;
 
     cardButton.addEventListener("click", () => {
-        activateCollection(String(collection.id), { resetIndex: true, scrollToQuiz: true });
+        const detailUrl = new URL("./collection.html", window.location.href);
+        detailUrl.searchParams.set("collection", String(collection.id));
+        window.location.href = detailUrl.toString();
     });
 
     return cardButton;
@@ -644,7 +635,6 @@ async function resetProgressStats() {
             throw new Error(payload.detail || `Could not reset stats (HTTP ${response.status}).`);
         }
 
-        quizAttemptsByCard.clear();
         await fetchCards();
         setStatus(`Reset progress for ${payload.cards_reset || 0} card(s).`, "success");
     } catch (error) {
@@ -699,33 +689,23 @@ async function handleAnswerSubmit(event) {
 
     const currentCard = filteredCards[currentIndex];
     const expectedAnswer = currentCard.answer || "";
-    const previousAttempts = quizAttemptsByCard.get(currentCard.id) || 0;
     const isCorrect = answersMatch(userAnswer, expectedAnswer);
 
     try {
         if (isCorrect) {
-            const isFirstTry = previousAttempts === 0;
-            const rating = isFirstTry ? "easy" : "hard";
             const nextCardId = filteredCards.length > 1
                 ? filteredCards[(currentIndex + 1) % filteredCards.length].id
                 : null;
 
-            await submitReview(currentCard.id, rating);
-            quizAttemptsByCard.set(currentCard.id, previousAttempts + 1);
+            await submitReview(currentCard.id, "easy");
 
             applyFilters({ preferredCardId: nextCardId, resetIndex: false });
-            setStatus(
-                isFirstTry
-                    ? "Correct on first try. Accuracy, reviewed today, and mastery were updated."
-                    : "Correct. Accuracy and reviewed today were updated.",
-                "success"
-            );
+            setStatus("Correct. Accuracy, reviewed today, and mastery were updated.", "success");
             answerInput?.focus();
             return;
         }
 
         await submitReview(currentCard.id, "again");
-        quizAttemptsByCard.set(currentCard.id, previousAttempts + 1);
         updateDashboard();
         renderCollectionGrid();
 
