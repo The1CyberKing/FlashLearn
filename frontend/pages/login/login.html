@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlashLearn Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="login.css">
+</head>
+<body>
+    <main class="login-shell">
+        <section class="login-card" aria-labelledby="login-title">
+            <p class="eyebrow">FlashLearn</p>
+            <h1 id="login-title">Sign in to continue</h1>
+            <p class="subhead">Access your profile and synced flashcards.</p>
+
+            <div class="provider-list">
+                <button
+                    id="google-login-btn"
+                    class="provider-btn provider-google"
+                    data-provider="google"
+                    type="button"
+                    onclick="window.__flashlearnStartGoogleAuth && window.__flashlearnStartGoogleAuth()"
+                >
+                    Continue with Google
+                </button>
+                <button class="provider-btn provider-soon" data-provider="apple" type="button" disabled>
+                    Discord (Coming Soon)
+                </button>
+                <button class="provider-btn provider-soon" data-provider="github" type="button" disabled>
+                    GitHub (Coming Soon)
+                </button>
+            </div>
+
+            <p id="login-note" class="login-note"></p>
+            <p id="login-error" class="login-error" aria-live="polite"></p>
+            <a class="back-link" href="../study/index.html">Back to Study Dashboard</a>
+        </section>
+    </main>
+
+    <script>
+        (function () {
+            const SUPABASE_URL = "https://sfxtsemiitbruxmdurva.supabase.co";
+            const hash = window.location.hash.startsWith("#")
+                ? window.location.hash.slice(1)
+                : window.location.hash;
+
+            function getHashParamValue(hashContent, key) {
+                const regex = new RegExp(`${key}=([^&#]+)`, "g");
+                const matches = Array.from(hashContent.matchAll(regex));
+                if (matches.length === 0) return null;
+                return decodeURIComponent(matches[matches.length - 1][1]);
+            }
+
+            function resolveNextPath() {
+                const legacyNextMap = {
+                    "index.html": "../study/index.html",
+                    "/index.html": "../study/index.html",
+                    "quiz.html": "../quiz/quiz.html",
+                    "/quiz.html": "../quiz/quiz.html",
+                    "profile.html": "../profile/profile.html",
+                    "/profile.html": "../profile/profile.html",
+                    "login.html": "../login/login.html",
+                    "/login.html": "../login/login.html",
+                };
+                const params = new URLSearchParams(window.location.search);
+                const nextRaw = params.get("next") || "../study/index.html";
+                const resolved = new URL(legacyNextMap[nextRaw] || nextRaw, window.location.href);
+                if (resolved.origin !== window.location.origin) {
+                    return new URL("../study/index.html", window.location.href).toString();
+                }
+                return resolved.toString();
+            }
+
+            if (hash) {
+                const callbackAccessToken = getHashParamValue(hash, "access_token");
+                if (callbackAccessToken) {
+                    localStorage.setItem("userToken", callbackAccessToken);
+                    sessionStorage.setItem("showWelcomeAfterAuth", "1");
+                    window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
+                    window.location.replace(resolveNextPath());
+                    return;
+                }
+            }
+
+            window.__flashlearnStartGoogleAuth = function () {
+                const loginError = document.getElementById("login-error");
+                if (loginError) loginError.textContent = "";
+                sessionStorage.setItem("showWelcomeAfterAuth", "1");
+
+                if (window.location.protocol === "file:") {
+                    if (loginError) {
+                        loginError.textContent = "Google sign-in requires http://localhost or https://, not file://.";
+                    }
+                    return;
+                }
+
+                try {
+                    const params = new URLSearchParams(window.location.search);
+                    const next = params.get("next") || "../study/index.html";
+                    const loginReturnUrl = new URL(next, window.location.href);
+                    loginReturnUrl.hash = "";
+
+                    const authorizeUrl = new URL(`${SUPABASE_URL}/auth/v1/authorize`);
+                    authorizeUrl.searchParams.set("provider", "google");
+                    authorizeUrl.searchParams.set("redirect_to", loginReturnUrl.toString());
+                    window.location.assign(authorizeUrl.toString());
+                } catch (error) {
+                    if (loginError) {
+                        loginError.textContent = error?.message || "Could not start Google sign in.";
+                    }
+                }
+            };
+        })();
+    </script>
+    <script type="module" src="login.js?v=4"></script>
+</body>
+</html>

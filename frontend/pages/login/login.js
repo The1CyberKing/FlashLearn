@@ -3,7 +3,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const SUPABASE_URL = "https://sfxtsemiitbruxmdurva.supabase.co";
 const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmeHRzZW1paXRicnV4bWR1cnZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMjE3NjcsImV4cCI6MjA4NTg5Nzc2N30.M4ErTSvcEIezdt72o-DBYFONe5l9UWWoQYGy2-HkaeA";
-const DEFAULT_NEXT_PATH = "index.html";
+const DEFAULT_NEXT_PATH = "../study/index.html";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -26,16 +26,27 @@ function setStoredToken(session) {
 function resolveNextPath() {
     const defaultResolved = new URL(DEFAULT_NEXT_PATH, window.location.href);
     const defaultNextPath = `${defaultResolved.pathname}${defaultResolved.search}${defaultResolved.hash}`;
+    const legacyNextMap = {
+        "index.html": DEFAULT_NEXT_PATH,
+        "/index.html": DEFAULT_NEXT_PATH,
+        "quiz.html": "../quiz/quiz.html",
+        "/quiz.html": "../quiz/quiz.html",
+        "profile.html": "../profile/profile.html",
+        "/profile.html": "../profile/profile.html",
+        "login.html": "../login/login.html",
+        "/login.html": "../login/login.html",
+    };
 
     const params = new URLSearchParams(window.location.search);
     const rawNext = params.get("next");
+    const normalizedNext = legacyNextMap[rawNext] || rawNext;
 
-    if (!rawNext) {
+    if (!normalizedNext) {
         return defaultNextPath;
     }
 
     try {
-        const resolved = new URL(rawNext, window.location.href);
+        const resolved = new URL(normalizedNext, window.location.href);
         if (resolved.origin !== window.location.origin) {
             return defaultNextPath;
         }

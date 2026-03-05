@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlashLearn Profile</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="profile.css">
+</head>
+<body class="profile-loading">
+    <div class="profile-shell">
+        <header class="topbar">
+            <a class="topbar-link" href="../study/index.html" aria-label="Back to study dashboard">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M15.5 5.5 9 12l6.5 6.5" />
+                </svg>
+                Study
+            </a>
+
+            <p class="brand">FlashLearn</p>
+
+            <div class="topbar-meta">
+                <div class="topbar-user" aria-label="Current profile">
+                    <img id="topbar-avatar-image" class="topbar-avatar-image" alt="Profile avatar" hidden />
+                    <span id="topbar-avatar-fallback" class="topbar-avatar" aria-hidden="true">FL</span>
+                    <span id="topbar-user-name">Loading...</span>
+                </div>
+                <button id="profile-logout-btn" class="topbar-logout" type="button">Log Out</button>
+            </div>
+        </header>
+
+        <p id="profile-status" class="profile-status" role="status">Loading your profile...</p>
+
+        <main id="profile-main" class="profile-main" hidden>
+            <section class="hero-card">
+                <img id="hero-avatar-image" class="hero-avatar-image" alt="Profile avatar" hidden />
+                <div id="hero-avatar-fallback" class="hero-avatar" aria-hidden="true">FL</div>
+                <h1 id="profile-display-name">Learner</h1>
+                <p class="hero-subtitle">Account &amp; Settings</p>
+
+                <div class="hero-stats">
+                    <article class="stat">
+                        <h2 id="profile-total-flashcards">0</h2>
+                        <p>Total flashcards</p>
+                    </article>
+                    <article class="stat">
+                        <h2 id="profile-member-since">-</h2>
+                        <p>Member since</p>
+                    </article>
+                </div>
+            </section>
+
+            <section class="settings-card" aria-label="Profile settings">
+                <article class="setting-row">
+                    <div>
+                        <p class="setting-label">First name</p>
+                        <p id="profile-first-name" class="setting-value">-</p>
+                    </div>
+                    <button type="button" disabled>Soon</button>
+                </article>
+
+                <article class="setting-row">
+                    <div>
+                        <p class="setting-label">Last name</p>
+                        <p id="profile-last-name" class="setting-value">-</p>
+                    </div>
+                    <button type="button" disabled>Soon</button>
+                </article>
+
+                <article class="setting-row">
+                    <div>
+                        <p class="setting-label">Email address</p>
+                        <p id="profile-email" class="setting-value setting-value-email">-</p>
+                    </div>
+                    <button type="button" disabled>Soon</button>
+                </article>
+
+                <article class="setting-row">
+                    <div>
+                        <p class="setting-label">Avatar</p>
+                        <p class="setting-value setting-value-avatar">Choose a profile avatar</p>
+                        <div id="avatar-picker" class="avatar-picker" role="radiogroup" aria-label="Choose avatar">
+                            <button class="avatar-choice" type="button" data-avatar="google" aria-pressed="false" title="Use Google photo">G</button>
+                            <button class="avatar-choice" type="button" data-avatar="fox" aria-pressed="false" title="Fox">🦊</button>
+                            <button class="avatar-choice" type="button" data-avatar="owl" aria-pressed="false" title="Owl">🦉</button>
+                            <button class="avatar-choice" type="button" data-avatar="panda" aria-pressed="false" title="Panda">🐼</button>
+                            <button class="avatar-choice" type="button" data-avatar="whale" aria-pressed="false" title="Whale">🐋</button>
+                            <button class="avatar-choice" type="button" data-avatar="cat" aria-pressed="false" title="Cat">🐱</button>
+                        </div>
+                    </div>
+                </article>
+            </section>
+        </main>
+    </div>
+    <script type="module" src="profile.js?v=3"></script>
+</body>
+</html>

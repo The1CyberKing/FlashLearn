@@ -1,4 +1,4 @@
-// script.js
+// study.js
 // PASTE YOUR CODESPACE URL HERE (No trailing slash)
 const API_URL = "https://flashcardapp-pwic.onrender.com";
 const DEFAULT_COLLECTION_COLOR = "#0F4C5C";
@@ -753,9 +753,10 @@ function setupNoticeModal() {
 
     if (noticeLoginBtn) {
         noticeLoginBtn.addEventListener("click", () => {
-            const currentPage = window.location.pathname.split("/").pop() || "index.html";
-            const nextPath = `${currentPage}${window.location.search || ""}${window.location.hash || ""}`;
-            window.location.href = `login.html?next=${encodeURIComponent(nextPath)}`;
+            const loginUrl = new URL("../login/login.html", window.location.href);
+            const nextPath = `${window.location.pathname}${window.location.search || ""}${window.location.hash || ""}`;
+            loginUrl.searchParams.set("next", nextPath);
+            window.location.href = loginUrl.toString();
         });
     }
 }

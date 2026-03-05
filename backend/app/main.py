@@ -1,0 +1,624 @@
+# main.py
+import os
+import re
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+import jwt
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from jwt import InvalidTokenError, PyJWKClient
+from jwt.exceptions import PyJWKClientError
+from pydantic import BaseModel
+from sqlalchemy import Column, DateTime, Float, Integer, String, create_engine, inspect, text
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import Session, sessionmaker
+
+# ==========================================
+# 1. DATABASE SETUP (Supabase)
+# ==========================================
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is required")
+
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+DEFAULT_COLLECTION_COLOR = "#0F4C5C"
+HEX_COLOR_PATTERN = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
+class CollectionDB(Base):
+    __tablename__ = "collections"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, index=True)
+    name = Column(String)
+    class_name = Column(String, nullable=True)
+    color = Column(String, nullable=True)
+
+
+class CardDB(Base):
+    __tablename__ = "flashcards"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, index=True)
+    question = Column(String)
+    answer = Column(String)
+    collection_id = Column(Integer, nullable=True, index=True)
+    review_count = Column(Integer, default=0, nullable=False)
+    correct_count = Column(Integer, default=0, nullable=False)
+    ease_factor = Column(Float, default=2.5, nullable=False)
+    interval_days = Column(Integer, default=0, nullable=False)
+    due_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    last_reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    streak_current = Column(Integer, default=0, nullable=False)
+    streak_best = Column(Integer, default=0, nullable=False)
+
+
+def ensure_schema() -> None:
+    """
+    Backfill missing columns/indexes for existing databases.
+    create_all() creates new tables but does not alter existing ones.
+    """
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    with engine.begin() as connection:
+        if "flashcards" in table_names:
+            flashcard_columns = {column["name"] for column in inspector.get_columns("flashcards")}
+            if "user_id" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN user_id VARCHAR"))
+            if "collection_id" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN collection_id INTEGER"))
+            if "review_count" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN review_count INTEGER"))
+            if "correct_count" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN correct_count INTEGER"))
+            if "ease_factor" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN ease_factor FLOAT"))
+            if "interval_days" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN interval_days INTEGER"))
+            if "due_at" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN due_at TIMESTAMP"))
+            if "last_reviewed_at" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN last_reviewed_at TIMESTAMP"))
+            if "streak_current" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN streak_current INTEGER"))
+            if "streak_best" not in flashcard_columns:
+                connection.execute(text("ALTER TABLE flashcards ADD COLUMN streak_best INTEGER"))
+
+            connection.execute(
+                text(
+                    """
+                    UPDATE flashcards
+                    SET
+                        review_count = COALESCE(review_count, 0),
+                        correct_count = COALESCE(correct_count, 0),
+                        ease_factor = COALESCE(ease_factor, 2.5),
+                        interval_days = COALESCE(interval_days, 0),
+                        due_at = COALESCE(due_at, CURRENT_TIMESTAMP),
+                        streak_current = COALESCE(streak_current, 0),
+                        streak_best = COALESCE(streak_best, 0)
+                    """
+                )
+            )
+
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_flashcards_user_id ON flashcards (user_id)"))
+            connection.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_flashcards_collection_id ON flashcards (collection_id)")
+            )
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_flashcards_due_at ON flashcards (due_at)"))
+
+        if "collections" in table_names:
+            collection_columns = {column["name"] for column in inspector.get_columns("collections")}
+            if "color" not in collection_columns:
+                connection.execute(text("ALTER TABLE collections ADD COLUMN color VARCHAR"))
+
+
+Base.metadata.create_all(bind=engine)
+ensure_schema()
+
+
+# ==========================================
+# 2. SUPABASE AUTH SETUP (The Gatekeeper)
+# ==========================================
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
+SUPABASE_JWT_ISSUER = os.getenv("SUPABASE_JWT_ISSUER", f"{SUPABASE_URL}/auth/v1" if SUPABASE_URL else "")
+SUPABASE_JWKS_CLIENT = (
+    PyJWKClient(f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json") if SUPABASE_URL else None
+)
+
+
+def decode_supabase_token(token: str) -> dict:
+    try:
+        header = jwt.get_unverified_header(token)
+        algorithm = header.get("alg")
+        if not algorithm:
+            raise HTTPException(status_code=401, detail="Invalid token header")
+
+        decode_kwargs = {
+            "algorithms": [algorithm],
+            "options": {"verify_aud": False},
+        }
+        if SUPABASE_JWT_ISSUER:
+            decode_kwargs["issuer"] = SUPABASE_JWT_ISSUER
+
+        if algorithm.startswith("HS"):
+            if not SUPABASE_JWT_SECRET:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Server auth misconfigured: missing SUPABASE_JWT_SECRET",
+                )
+            return jwt.decode(token, SUPABASE_JWT_SECRET, **decode_kwargs)
+
+        if SUPABASE_JWKS_CLIENT is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Server auth misconfigured: missing SUPABASE_URL",
+            )
+
+        signing_key = SUPABASE_JWKS_CLIENT.get_signing_key_from_jwt(token)
+        return jwt.decode(token, signing_key.key, **decode_kwargs)
+    except HTTPException:
+        raise
+    except (InvalidTokenError, PyJWKClientError):
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+def get_current_user(authorization: str = Header(None)) -> str:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="No authorization token provided")
+
+    try:
+        parts = authorization.split(" ", 1)
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            raise ValueError("Malformed authorization header")
+
+        decoded_token = decode_supabase_token(parts[1])
+        user_id = decoded_token.get("sub")
+        if not user_id:
+            raise ValueError("Token is missing subject")
+        return user_id
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+# ==========================================
+# 3. APP SETUP
+# ==========================================
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+class CardSchema(BaseModel):
+    question: str
+    answer: str
+    collection_id: Optional[int] = None
+
+
+class CollectionSchema(BaseModel):
+    name: str
+    class_name: Optional[str] = None
+    color: Optional[str] = None
+
+
+class CardReviewSchema(BaseModel):
+    rating: str
+
+
+class CardProgressResetSchema(BaseModel):
+    collection_id: Optional[int] = None
+
+
+def normalize_collection_color(color: Optional[str]) -> str:
+    if not color:
+        return DEFAULT_COLLECTION_COLOR
+
+    candidate = color.strip()
+    if not HEX_COLOR_PATTERN.match(candidate):
+        raise HTTPException(status_code=400, detail="Collection color must be a hex value like #0F4C5C")
+    return candidate.upper()
+
+
+def get_owned_collection(collection_id: int, user_id: str, db: Session) -> CollectionDB:
+    collection = (
+        db.query(CollectionDB)
+        .filter(CollectionDB.id == collection_id, CollectionDB.user_id == user_id)
+        .first()
+    )
+    if not collection:
+        raise HTTPException(status_code=404, detail="Collection not found or access denied")
+    return collection
+
+
+def get_owned_card(card_id: int, user_id: str, db: Session) -> CardDB:
+    card = db.query(CardDB).filter(CardDB.id == card_id, CardDB.user_id == user_id).first()
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found or access denied")
+    return card
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def as_non_negative_int(value, fallback: int = 0) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def as_float(value, fallback: float = 2.5) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def serialize_card(card: CardDB) -> dict:
+    return {
+        "id": card.id,
+        "user_id": card.user_id,
+        "question": card.question,
+        "answer": card.answer,
+        "collection_id": card.collection_id,
+        "review_count": as_non_negative_int(card.review_count),
+        "correct_count": as_non_negative_int(card.correct_count),
+        "ease_factor": round(as_float(card.ease_factor), 2),
+        "interval_days": as_non_negative_int(card.interval_days),
+        "due_at": card.due_at.isoformat() if card.due_at else None,
+        "last_reviewed_at": card.last_reviewed_at.isoformat() if card.last_reviewed_at else None,
+        "streak_current": as_non_negative_int(card.streak_current),
+        "streak_best": as_non_negative_int(card.streak_best),
+    }
+
+
+def apply_card_review(card: CardDB, rating: str) -> dict:
+    normalized_rating = rating.strip().lower()
+    if normalized_rating not in {"again", "hard", "good", "easy"}:
+        raise HTTPException(status_code=400, detail="Rating must be one of: again, hard, good, easy")
+
+    now = utc_now()
+    review_count = as_non_negative_int(card.review_count) + 1
+    correct_count = as_non_negative_int(card.correct_count)
+    ease_factor = max(1.3, as_float(card.ease_factor))
+    interval_days = as_non_negative_int(card.interval_days)
+    streak_current = as_non_negative_int(card.streak_current)
+    streak_best = as_non_negative_int(card.streak_best)
+
+    if normalized_rating == "again":
+        interval_days = 0
+        ease_factor = max(1.3, ease_factor - 0.2)
+        streak_current = 0
+        due_at = now + timedelta(minutes=10)
+    elif normalized_rating == "hard":
+        interval_days = 1 if interval_days <= 1 else max(1, round(interval_days * 1.2))
+        ease_factor = max(1.3, ease_factor - 0.15)
+        streak_current += 1
+        correct_count += 1
+        due_at = now + timedelta(days=interval_days)
+    elif normalized_rating == "good":
+        growth_base = interval_days if interval_days > 0 else 1
+        interval_days = max(1, round(growth_base * ease_factor))
+        ease_factor = min(3.0, ease_factor + 0.05)
+        streak_current += 1
+        correct_count += 1
+        due_at = now + timedelta(days=interval_days)
+    else:
+        growth_base = interval_days if interval_days > 0 else 2
+        interval_days = max(2, round(growth_base * (ease_factor + 0.3)))
+        ease_factor = min(3.2, ease_factor + 0.1)
+        streak_current += 1
+        correct_count += 1
+        due_at = now + timedelta(days=interval_days)
+
+    card.review_count = review_count
+    card.correct_count = correct_count
+    card.ease_factor = round(ease_factor, 2)
+    card.interval_days = interval_days
+    card.last_reviewed_at = now
+    card.due_at = due_at
+    card.streak_current = streak_current
+    card.streak_best = max(streak_best, streak_current)
+
+    return {
+        "rating": normalized_rating,
+        "next_due_at": due_at.isoformat(),
+        "interval_days": interval_days,
+    }
+
+
+# ==========================================
+# 4. API ENDPOINTS (Protected)
+# ==========================================
+
+@app.get("/")
+def read_root():
+    return {"message": "Flashcard API is running with Auth and Collections!"}
+
+
+@app.get("/collections")
+def get_collections(user_id: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    return (
+        db.query(CollectionDB)
+        .filter(CollectionDB.user_id == user_id)
+        .order_by(CollectionDB.name.asc())
+        .all()
+    )
+
+
+@app.post("/collections")
+def create_collection(
+    collection: CollectionSchema,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    name = collection.name.strip()
+    class_name = collection.class_name.strip() if collection.class_name else None
+    color = normalize_collection_color(collection.color)
+
+    if not name:
+        raise HTTPException(status_code=400, detail="Collection name is required")
+
+    duplicate = (
+        db.query(CollectionDB)
+        .filter(
+            CollectionDB.user_id == user_id,
+            CollectionDB.name == name,
+            CollectionDB.class_name == class_name,
+        )
+        .first()
+    )
+    if duplicate:
+        raise HTTPException(status_code=409, detail="A matching collection already exists")
+
+    new_collection = CollectionDB(user_id=user_id, name=name, class_name=class_name, color=color)
+    db.add(new_collection)
+    db.commit()
+    db.refresh(new_collection)
+
+    return {
+        "message": "Collection added",
+        "id": new_collection.id,
+        "name": new_collection.name,
+        "class_name": new_collection.class_name,
+        "color": new_collection.color,
+    }
+
+
+@app.put("/collections/{collection_id}")
+def update_collection(
+    collection_id: int,
+    collection: CollectionSchema,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    owned_collection = get_owned_collection(collection_id, user_id, db)
+
+    name = collection.name.strip()
+    class_name = collection.class_name.strip() if collection.class_name else None
+    color = normalize_collection_color(collection.color)
+
+    if not name:
+        raise HTTPException(status_code=400, detail="Collection name is required")
+
+    duplicate = (
+        db.query(CollectionDB)
+        .filter(
+            CollectionDB.user_id == user_id,
+            CollectionDB.id != collection_id,
+            CollectionDB.name == name,
+            CollectionDB.class_name == class_name,
+        )
+        .first()
+    )
+    if duplicate:
+        raise HTTPException(status_code=409, detail="A matching collection already exists")
+
+    owned_collection.name = name
+    owned_collection.class_name = class_name
+    owned_collection.color = color
+    db.commit()
+    db.refresh(owned_collection)
+
+    return {
+        "message": "Collection updated",
+        "id": owned_collection.id,
+        "name": owned_collection.name,
+        "class_name": owned_collection.class_name,
+        "color": owned_collection.color,
+    }
+
+
+@app.delete("/collections/{collection_id}")
+def delete_collection(
+    collection_id: int,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    collection = get_owned_collection(collection_id, user_id, db)
+
+    db.query(CardDB).filter(
+        CardDB.user_id == user_id,
+        CardDB.collection_id == collection.id,
+    ).update({CardDB.collection_id: None}, synchronize_session=False)
+
+    db.delete(collection)
+    db.commit()
+    return {"message": "Collection deleted"}
+
+
+@app.get("/collections/{collection_id}/cards")
+def get_cards_for_collection(
+    collection_id: int,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    get_owned_collection(collection_id, user_id, db)
+
+    cards = (
+        db.query(CardDB)
+        .filter(CardDB.user_id == user_id, CardDB.collection_id == collection_id)
+        .order_by(CardDB.id.asc())
+        .all()
+    )
+    return [serialize_card(card) for card in cards]
+
+
+@app.get("/cards")
+def get_cards(
+    collection_id: Optional[int] = Query(default=None),
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    cards_query = db.query(CardDB).filter(CardDB.user_id == user_id)
+
+    if collection_id is not None:
+        get_owned_collection(collection_id, user_id, db)
+        cards_query = cards_query.filter(CardDB.collection_id == collection_id)
+
+    cards = cards_query.order_by(CardDB.id.asc()).all()
+    return [serialize_card(card) for card in cards]
+
+
+@app.post("/cards")
+def create_card(
+    card: CardSchema,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    question = card.question.strip()
+    answer = card.answer.strip()
+
+    if not question or not answer:
+        raise HTTPException(status_code=400, detail="Question and answer are required")
+
+    if card.collection_id is not None:
+        get_owned_collection(card.collection_id, user_id, db)
+
+    new_card = CardDB(
+        question=question,
+        answer=answer,
+        user_id=user_id,
+        collection_id=card.collection_id,
+        review_count=0,
+        correct_count=0,
+        ease_factor=2.5,
+        interval_days=0,
+        due_at=utc_now(),
+        last_reviewed_at=None,
+        streak_current=0,
+        streak_best=0,
+    )
+    db.add(new_card)
+    db.commit()
+    db.refresh(new_card)
+    return {"message": "Card added", "id": new_card.id}
+
+
+@app.delete("/cards/{card_id}")
+def delete_card(card_id: int, user_id: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    card = get_owned_card(card_id, user_id, db)
+
+    db.delete(card)
+    db.commit()
+    return {"message": "Deleted"}
+
+
+@app.put("/cards/{card_id}")
+def update_card(
+    card_id: int,
+    card_data: CardSchema,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    db_card = get_owned_card(card_id, user_id, db)
+
+    question = card_data.question.strip()
+    answer = card_data.answer.strip()
+    if not question or not answer:
+        raise HTTPException(status_code=400, detail="Question and answer are required")
+
+    if card_data.collection_id is not None:
+        get_owned_collection(card_data.collection_id, user_id, db)
+
+    db_card.question = question
+    db_card.answer = answer
+    db_card.collection_id = card_data.collection_id
+    db.commit()
+    return {"message": "Updated"}
+
+
+@app.post("/cards/{card_id}/review")
+def review_card(
+    card_id: int,
+    review: CardReviewSchema,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    db_card = get_owned_card(card_id, user_id, db)
+    result = apply_card_review(db_card, review.rating)
+    db.commit()
+    db.refresh(db_card)
+    return {
+        "message": "Review recorded",
+        "result": result,
+        "card": serialize_card(db_card),
+    }
+
+
+@app.post("/cards/reset-progress")
+def reset_card_progress(
+    payload: CardProgressResetSchema,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    reset_query = db.query(CardDB).filter(CardDB.user_id == user_id)
+
+    if payload.collection_id is not None:
+        get_owned_collection(payload.collection_id, user_id, db)
+        reset_query = reset_query.filter(CardDB.collection_id == payload.collection_id)
+
+    cards_to_reset = reset_query.count()
+    if cards_to_reset == 0:
+        return {"message": "No cards to reset", "cards_reset": 0}
+
+    reset_query.update(
+        {
+            CardDB.review_count: 0,
+            CardDB.correct_count: 0,
+            CardDB.ease_factor: 2.5,
+            CardDB.interval_days: 0,
+            CardDB.due_at: utc_now(),
+            CardDB.last_reviewed_at: None,
+            CardDB.streak_current: 0,
+            CardDB.streak_best: 0,
+        },
+        synchronize_session=False,
+    )
+    db.commit()
+
+    return {"message": "Card progress reset", "cards_reset": cards_to_reset}

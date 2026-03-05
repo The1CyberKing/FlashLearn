@@ -4,7 +4,7 @@ const SUPABASE_URL = "https://sfxtsemiitbruxmdurva.supabase.co";
 const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmeHRzZW1paXRicnV4bWR1cnZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMjE3NjcsImV4cCI6MjA4NTg5Nzc2N30.M4ErTSvcEIezdt72o-DBYFONe5l9UWWoQYGy2-HkaeA";
 const API_URL = "https://flashcardapp-pwic.onrender.com";
-const LOGIN_REDIRECT_BASE = "login.html";
+const LOGIN_REDIRECT_BASE = "../login/login.html";
 const AVATAR_PRESET_KEY = "flashlearnAvatarPreset";
 const AVATAR_PRESETS = {
     google: { emoji: "G", background: "linear-gradient(160deg, #dbe8ff, #bdd9f1)" },
@@ -224,7 +224,7 @@ function setupAvatarPicker() {
 }
 
 function getNextForLoginRedirect() {
-    return "index.html";
+    return "../study/index.html";
 }
 
 function redirectToLogin() {

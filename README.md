@@ -14,7 +14,7 @@ You can now:
 
 ## Backend Overview
 
-Main backend file: `/Users/GeneralUse/LinuxHome/FlashcardTest/main.py`
+Primary backend file: `/Users/GeneralUse/LinuxHome/FlashcardTest/backend/app/main.py`
 
 ### Data model
 - `flashcards`
@@ -39,7 +39,7 @@ Main backend file: `/Users/GeneralUse/LinuxHome/FlashcardTest/main.py`
 
 ### Startup schema guard
 
-`main.py` includes `ensure_schema()` which:
+`backend/app/main.py` includes `ensure_schema()` which:
 - keeps existing DBs working
 - adds missing `flashcards` learning columns when needed
 - creates indexes if missing
@@ -130,12 +130,12 @@ All endpoints below require a Supabase bearer token in `Authorization` header.
 ## Frontend Changes
 
 Updated files:
-- `/Users/GeneralUse/LinuxHome/FlashcardTest/index.html`
-- `/Users/GeneralUse/LinuxHome/FlashcardTest/script.js`
-- `/Users/GeneralUse/LinuxHome/FlashcardTest/style.css`
-- `/Users/GeneralUse/LinuxHome/FlashcardTest/quiz.html`
-- `/Users/GeneralUse/LinuxHome/FlashcardTest/quiz.js`
-- `/Users/GeneralUse/LinuxHome/FlashcardTest/quiz.css`
+- `/Users/GeneralUse/LinuxHome/FlashcardTest/frontend/pages/study/index.html`
+- `/Users/GeneralUse/LinuxHome/FlashcardTest/frontend/pages/study/study.js`
+- `/Users/GeneralUse/LinuxHome/FlashcardTest/frontend/pages/study/study.css`
+- `/Users/GeneralUse/LinuxHome/FlashcardTest/frontend/pages/quiz/quiz.html`
+- `/Users/GeneralUse/LinuxHome/FlashcardTest/frontend/pages/quiz/quiz.js`
+- `/Users/GeneralUse/LinuxHome/FlashcardTest/frontend/pages/quiz/quiz.css`
 
 Added UI:
 - Collection dropdown (`All Collections` + user collections)
@@ -159,7 +159,7 @@ Behavior:
 To ship this feature:
 1. Redeploy backend service on Render (required).
 2. Deploy updated frontend (GitHub Pages or your host) (required for UI feature).
-3. Set Supabase auth config on frontend in `/Users/GeneralUse/LinuxHome/FlashcardTest/index.html`:
+3. Set Supabase auth config on frontend in `/Users/GeneralUse/LinuxHome/FlashcardTest/frontend/pages/study/index.html`:
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
 4. Set backend auth environment variables:
