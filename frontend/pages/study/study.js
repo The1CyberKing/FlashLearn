@@ -7,14 +7,12 @@ if (!core) {
 const { CONFIG, getHeaders, hasValidToken } = core;
 const API_URL = CONFIG.API_URL;
 const DEFAULT_COLLECTION_COLOR = CONFIG.DEFAULT_COLLECTION_COLOR;
-const REVIEW_RATINGS = ["again", "hard", "good", "easy"];
 
 let flashcards = [];
 let allFlashcards = [];
 let collections = [];
 let currentIndex = 0;
 let activeCollection = "all";
-let studyMode = "all";
 let editingCardId = null;
 let editingCollectionId = null;
 let pendingConfirmAction = null;
@@ -34,17 +32,6 @@ const deleteCollectionButton = document.getElementById("delete-collection-btn");
 const exportCollectionButton = document.getElementById("export-collection-btn");
 const importCollectionButton = document.getElementById("import-collection-btn");
 const importCollectionFileInput = document.getElementById("import-collection-file");
-const studyModeToggleButton = document.getElementById("study-mode-toggle");
-const studyModeHint = document.getElementById("study-mode-hint");
-const reviewActionsContainer = document.getElementById("review-actions");
-const reviewButtons = Array.from(document.querySelectorAll(".review-btn"));
-
-const progressTotalElement = document.getElementById("progress-total");
-const progressDueElement = document.getElementById("progress-due");
-const progressMasteredElement = document.getElementById("progress-mastered");
-const progressAccuracyElement = document.getElementById("progress-accuracy");
-const progressReviewedTodayElement = document.getElementById("progress-reviewed-today");
-const progressWeakListElement = document.getElementById("progress-weak-list");
 
 const addCardModal = document.getElementById("add-card-modal");
 const addCardForm = document.getElementById("add-card-form");
@@ -171,40 +158,6 @@ function toNumber(value, fallback = 0) {
     return parsed;
 }
 
-function toDateOrNull(value) {
-    if (!value) return null;
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return parsed;
-}
-
-function isSameLocalDay(dateA, dateB) {
-    return dateA.getFullYear() === dateB.getFullYear()
-        && dateA.getMonth() === dateB.getMonth()
-        && dateA.getDate() === dateB.getDate();
-}
-
-function isCardDue(card, referenceDate = new Date()) {
-    const dueDate = toDateOrNull(card?.due_at);
-    if (!dueDate) return true;
-    return dueDate.getTime() <= referenceDate.getTime();
-}
-
-function getCardAccuracy(card) {
-    const reviews = toNonNegativeInteger(card?.review_count, 0);
-    if (reviews <= 0) return null;
-    const correct = toNonNegativeInteger(card?.correct_count, 0);
-    return correct / reviews;
-}
-
-function isCardMastered(card) {
-    const accuracy = getCardAccuracy(card);
-    if (accuracy === null) return false;
-    return toNonNegativeInteger(card?.review_count, 0) >= 5
-        && toNonNegativeInteger(card?.interval_days, 0) >= 14
-        && accuracy >= 0.8;
-}
-
 function normalizeCardPayload(card) {
     return {
         ...card,
@@ -227,25 +180,9 @@ function getActiveCollection() {
 }
 
 function getFilteredCards() {
-    const collectionScopedCards = activeCollection === "all"
+    return activeCollection === "all"
         ? [...allFlashcards]
         : allFlashcards.filter((card) => String(card.collection_id) === String(activeCollection));
-
-    if (studyMode !== "due") {
-        return collectionScopedCards;
-    }
-
-    return collectionScopedCards
-        .filter((card) => isCardDue(card))
-        .sort((left, right) => {
-            const leftDueDate = toDateOrNull(left?.due_at);
-            const rightDueDate = toDateOrNull(right?.due_at);
-
-            if (!leftDueDate && !rightDueDate) return 0;
-            if (!leftDueDate) return -1;
-            if (!rightDueDate) return 1;
-            return leftDueDate.getTime() - rightDueDate.getTime();
-        });
 }
 
 function truncateCardQuestion(question) {
@@ -274,8 +211,6 @@ function applyActiveCollectionFilter({ preferredCardId = null, resetIndex = fals
     }
 
     updateActiveCollectionLabel();
-    updateStudyModeUI();
-    updateProgressDashboard();
     updateCardDisplay();
 }
 
@@ -529,100 +464,6 @@ function updateCollectionActionButtons(selectedCollection) {
     if (importCollectionButton) importCollectionButton.disabled = !canUseCollections;
 }
 
-function updateStudyModeUI() {
-    const canStudy = hasValidToken();
-    const dueCount = allFlashcards.filter((card) => {
-        if (activeCollection !== "all" && String(card.collection_id) !== String(activeCollection)) {
-            return false;
-        }
-        return isCardDue(card);
-    }).length;
-
-    if (studyModeToggleButton) {
-        const modeLabel = studyMode === "due" ? `Due Cards (${dueCount})` : "All Cards";
-        studyModeToggleButton.textContent = `Study Mode: ${modeLabel}`;
-        studyModeToggleButton.classList.toggle("is-due", studyMode === "due");
-        studyModeToggleButton.disabled = !canStudy;
-    }
-
-    if (studyModeHint) {
-        if (!canStudy) {
-            studyModeHint.textContent = "Log in to track reviews and due cards.";
-        } else if (studyMode === "due") {
-            studyModeHint.textContent = dueCount > 0
-                ? `${dueCount} due card(s) ready now.`
-                : "No due cards right now. Switch back to All Cards to browse.";
-        } else {
-            studyModeHint.textContent = "Due cards are those ready for review right now.";
-        }
-    }
-
-    const canRate = canStudy && flashcards.length > 0;
-    reviewButtons.forEach((button) => {
-        button.disabled = !canRate;
-    });
-
-    if (reviewActionsContainer) {
-        reviewActionsContainer.style.opacity = canRate ? "1" : "0.75";
-    }
-}
-
-function renderWeakCardsList(items) {
-    if (!progressWeakListElement) return;
-    progressWeakListElement.innerHTML = "";
-
-    if (!items.length) {
-        const listItem = document.createElement("li");
-        listItem.textContent = hasValidToken()
-            ? "Review a few cards to unlock insights."
-            : "Log in to see personalized study insights.";
-        progressWeakListElement.appendChild(listItem);
-        return;
-    }
-
-    for (const item of items) {
-        const listItem = document.createElement("li");
-        const accuracyPercent = Math.round(item.accuracy * 100);
-        listItem.textContent = `${truncateCardQuestion(item.question)} (${accuracyPercent}% correct)`;
-        progressWeakListElement.appendChild(listItem);
-    }
-}
-
-function updateProgressDashboard() {
-    const cards = [...allFlashcards];
-    const totalCards = cards.length;
-    const dueCards = cards.filter((card) => isCardDue(card)).length;
-    const masteredCards = cards.filter((card) => isCardMastered(card)).length;
-    const totalReviews = cards.reduce((sum, card) => sum + toNonNegativeInteger(card.review_count, 0), 0);
-    const totalCorrect = cards.reduce((sum, card) => sum + toNonNegativeInteger(card.correct_count, 0), 0);
-    const reviewedToday = cards.filter((card) => {
-        const reviewedDate = toDateOrNull(card.last_reviewed_at);
-        return reviewedDate ? isSameLocalDay(reviewedDate, new Date()) : false;
-    }).length;
-    const accuracy = totalReviews > 0 ? Math.round((totalCorrect / totalReviews) * 100) : 0;
-
-    if (progressTotalElement) progressTotalElement.textContent = String(totalCards);
-    if (progressDueElement) progressDueElement.textContent = String(dueCards);
-    if (progressMasteredElement) progressMasteredElement.textContent = String(masteredCards);
-    if (progressAccuracyElement) progressAccuracyElement.textContent = `${accuracy}%`;
-    if (progressReviewedTodayElement) progressReviewedTodayElement.textContent = String(reviewedToday);
-
-    const weakestCards = cards
-        .filter((card) => toNonNegativeInteger(card.review_count, 0) >= 2)
-        .map((card) => ({
-            question: card.question,
-            accuracy: getCardAccuracy(card) ?? 1,
-            review_count: toNonNegativeInteger(card.review_count, 0),
-        }))
-        .sort((left, right) => {
-            if (left.accuracy !== right.accuracy) return left.accuracy - right.accuracy;
-            return right.review_count - left.review_count;
-        })
-        .slice(0, 3);
-
-    renderWeakCardsList(weakestCards);
-}
-
 function renderCollectionOptions() {
     if (collectionSelect) {
         collectionSelect.innerHTML = "";
@@ -648,8 +489,6 @@ function renderCollectionOptions() {
     }
 
     updateActiveCollectionLabel();
-    updateStudyModeUI();
-    updateProgressDashboard();
     renderCollectionTree();
 }
 
@@ -663,13 +502,7 @@ async function initializeApp() {
     setupWelcomeModal();
     setupNoticeModal();
     setupImportExportControls();
-    const hasStudyWidgets = Boolean(studyModeToggleButton)
-        || reviewButtons.length > 0
-        || Boolean(progressTotalElement);
-    if (hasStudyWidgets) {
-        setupStudyModeControls();
-        setupKeyboardShortcuts();
-    }
+    setupKeyboardShortcuts();
     renderCollectionOptions();
     await fetchCollections();
     await fetchFlashcards();
@@ -720,7 +553,6 @@ function setupWelcomeModal() {
 
     window.showWelcomeModal = (displayName, onContinue) => {
         if (!welcomeModal || !welcomeUserName) {
-            alert(`Welcome, ${displayName || "Learner"}`);
             if (typeof onContinue === "function") onContinue();
             return;
         }
@@ -775,20 +607,6 @@ function setupImportExportControls() {
     }
 }
 
-function setupStudyModeControls() {
-    if (studyModeToggleButton) {
-        studyModeToggleButton.addEventListener("click", () => {
-            if (!hasValidToken()) {
-                showNoticeModal("Sign In Required", "You must be logged in to use Study Mode.");
-                return;
-            }
-            studyMode = studyMode === "due" ? "all" : "due";
-            applyActiveCollectionFilter({ resetIndex: true });
-        });
-    }
-    updateStudyModeUI();
-}
-
 function setupKeyboardShortcuts() {
     document.addEventListener("keydown", (event) => {
         const openOverlays = modalOverlays.some((overlay) => overlay.classList.contains("is-open"));
@@ -815,37 +633,13 @@ function setupKeyboardShortcuts() {
         if (event.key === "ArrowLeft") {
             event.preventDefault();
             prevCard();
-            return;
-        }
-
-        if (event.key === "1") {
-            event.preventDefault();
-            reviewCurrentCard("again");
-            return;
-        }
-
-        if (event.key === "2") {
-            event.preventDefault();
-            reviewCurrentCard("hard");
-            return;
-        }
-
-        if (event.key === "3") {
-            event.preventDefault();
-            reviewCurrentCard("good");
-            return;
-        }
-
-        if (event.key === "4") {
-            event.preventDefault();
-            reviewCurrentCard("easy");
         }
     });
 }
 
 function showNoticeModal(title, message, options = {}) {
     if (!noticeModal || !noticeTitle || !noticeMessage) {
-        alert(message || title || "Notice");
+        console.warn("Notice modal is unavailable:", title, message);
         return;
     }
     noticeTitle.textContent = title || "Notice";
@@ -855,6 +649,8 @@ function showNoticeModal(title, message, options = {}) {
     }
     openModal(noticeModal);
 }
+
+window.showNoticeModal = showNoticeModal;
 
 function makeSafeExportFileName(name) {
     const base = String(name || "collection")
@@ -1260,8 +1056,6 @@ async function fetchFlashcards() {
         flashcards = [];
         currentIndex = 0;
         updateActiveCollectionLabel();
-        updateStudyModeUI();
-        updateProgressDashboard();
         updateCardDisplay();
         return;
     }
@@ -1281,8 +1075,6 @@ async function fetchFlashcards() {
             currentIndex = 0;
             cardIndexDisplay.textContent = "0 / 0";
             updateActiveCollectionLabel();
-            updateStudyModeUI();
-            updateProgressDashboard();
             renderCollectionTree();
             return;
         }
@@ -1303,8 +1095,6 @@ async function fetchFlashcards() {
         cardAnswer.textContent = "Check console for details.";
         cardIndexDisplay.textContent = "0 / 0";
         updateActiveCollectionLabel();
-        updateStudyModeUI();
-        updateProgressDashboard();
         renderCollectionTree();
     }
 }
@@ -1405,67 +1195,9 @@ async function saveFlashcard(question, answer, errorElement = null) {
         if (errorElement) {
             setModalError(errorElement, "Failed to save card. Please try again.");
         } else {
-            alert("Failed to save card. Check console for details.");
+            showNoticeModal("Save Failed", "Failed to save card. Please try again.");
         }
         return false;
-    }
-}
-
-async function reviewCurrentCard(rating) {
-    const normalizedRating = String(rating || "").trim().toLowerCase();
-    if (!REVIEW_RATINGS.includes(normalizedRating)) return;
-
-    if (!hasValidToken()) {
-        showNoticeModal("Sign In Required", "You must be logged in to review cards.");
-        return;
-    }
-
-    if (!flashcards.length) return;
-
-    const currentCard = flashcards[currentIndex];
-    const nextCardId = flashcards.length > 1
-        ? flashcards[(currentIndex + 1) % flashcards.length]?.id ?? null
-        : null;
-
-    reviewButtons.forEach((button) => {
-        button.disabled = true;
-    });
-
-    try {
-        const response = await fetch(`${API_URL}/cards/${currentCard.id}/review`, {
-            method: "POST",
-            headers: getHeaders(),
-            body: JSON.stringify({ rating: normalizedRating })
-        });
-
-        const payload = await response.json().catch(() => ({}));
-
-        if (response.status === 401) {
-            showNoticeModal("Session Expired", "Please login again.");
-            return;
-        }
-
-        if (!response.ok) {
-            throw new Error(payload.detail || `Review request failed (HTTP ${response.status}).`);
-        }
-
-        const updatedCard = normalizeCardPayload(payload?.card || currentCard);
-        allFlashcards = allFlashcards.map((card) => {
-            if (String(card.id) === String(currentCard.id)) {
-                return updatedCard;
-            }
-            return card;
-        });
-
-        applyActiveCollectionFilter({ preferredCardId: nextCardId, resetIndex: false });
-        if (flashcards.length > 0) {
-            playCardAnimation("slide-left");
-        }
-    } catch (error) {
-        console.error("Review failed:", error);
-        showNoticeModal("Review Failed", error?.message || "Could not save this review right now.");
-    } finally {
-        updateStudyModeUI();
     }
 }
 
@@ -1475,9 +1207,7 @@ function addFlashcard() {
 
 function showConfirmModal({ title, message, confirmText, danger, onConfirm }) {
     if (!confirmModal || !confirmTitle || !confirmMessage || !confirmActionButton) {
-        if (confirm(message || "Are you sure?") && typeof onConfirm === "function") {
-            onConfirm();
-        }
+        showNoticeModal("Action Unavailable", "Confirmation dialog is unavailable. Please refresh and try again.");
         return;
     }
 
@@ -1493,7 +1223,7 @@ function showConfirmModal({ title, message, confirmText, danger, onConfirm }) {
 async function deleteFlashcard() {
     if (flashcards.length === 0) return;
     if (!hasValidToken()) {
-        alert("You must be logged in to delete cards.");
+        showNoticeModal("Sign In Required", "You must be logged in to delete cards.");
         return;
     }
 
@@ -1511,7 +1241,7 @@ async function deleteFlashcard() {
                 });
 
                 if (response.status === 401) {
-                    alert("Session expired. Please login again.");
+                    showNoticeModal("Session Expired", "Please login again.");
                     return;
                 }
 
@@ -1529,7 +1259,7 @@ async function deleteFlashcard() {
                 updateCardDisplay();
             } catch (error) {
                 console.error("Delete failed:", error);
-                alert("Failed to delete card.");
+                showNoticeModal("Delete Failed", "Failed to delete card.");
             }
         }
     });
@@ -1538,7 +1268,7 @@ async function deleteFlashcard() {
 function editFlashcard() {
     if (flashcards.length === 0) return;
     if (!hasValidToken()) {
-        alert("You must be logged in to edit cards.");
+        showNoticeModal("Sign In Required", "You must be logged in to edit cards.");
         return;
     }
 
@@ -1616,25 +1346,16 @@ function updateCardDisplay() {
         cardQuestion.textContent = "Please Login to see your cards.";
         cardAnswer.textContent = "Click the Login button above.";
         cardIndexDisplay.textContent = "0 / 0";
-        updateStudyModeUI();
         renderCollectionTree();
         return;
     }
 
     if (flashcards.length === 0) {
-        if (studyMode === "due") {
-            cardQuestion.textContent = activeCollection === "all"
-                ? "No due cards right now."
-                : "No due cards in this collection.";
-            cardAnswer.textContent = "Switch to All Cards or come back later.";
-        } else {
-            cardQuestion.textContent = activeCollection === "all"
-                ? "No cards yet."
-                : "No cards in this collection yet.";
-            cardAnswer.textContent = "...";
-        }
+        cardQuestion.textContent = activeCollection === "all"
+            ? "No cards yet."
+            : "No cards in this collection yet.";
+        cardAnswer.textContent = "...";
         cardIndexDisplay.textContent = "0 / 0";
-        updateStudyModeUI();
         renderCollectionTree();
         return;
     }
@@ -1643,7 +1364,6 @@ function updateCardDisplay() {
     cardQuestion.textContent = flashcards[currentIndex].question;
     cardAnswer.textContent = flashcards[currentIndex].answer;
     cardIndexDisplay.textContent = `${currentIndex + 1} / ${flashcards.length}`;
-    updateStudyModeUI();
     renderCollectionTree();
 }
 

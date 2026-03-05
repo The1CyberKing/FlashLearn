@@ -26,7 +26,9 @@
         const { error } = await signInWithGoogle(supabase, { showWelcomeAfterAuth: true });
         if (error) {
             console.error(error);
-            alert("Login failed");
+            if (typeof window.showNoticeModal === "function") {
+                window.showNoticeModal("Login Failed", "Could not start sign in. Please try again.");
+            }
         }
     };
 

@@ -24,7 +24,9 @@
         const { error } = await signInWithGoogle(supabase);
         if (error) {
             console.error(error);
-            alert("Login failed");
+            window.dispatchEvent(new CustomEvent("flashlearn:auth-error", {
+                detail: { message: "Could not start sign in. Please try again." },
+            }));
         }
     };
 

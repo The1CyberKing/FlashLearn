@@ -572,7 +572,8 @@ function closeConfirmModal() {
 
 function showResetConfirm(scopeLabel) {
     if (!resetConfirmModal || !resetConfirmMessage || !resetConfirmCancelButton || !resetConfirmAcceptButton) {
-        return Promise.resolve(window.confirm("Reset performance stats?"));
+        setStatus("Confirmation dialog is unavailable. Please refresh and try again.", "error");
+        return Promise.resolve(false);
     }
 
     resetConfirmMessage.textContent =
@@ -766,6 +767,11 @@ function setupEvents() {
 
     if (nextButton) nextButton.addEventListener("click", nextCard);
     if (prevButton) prevButton.addEventListener("click", prevCard);
+
+    window.addEventListener("flashlearn:auth-error", (event) => {
+        const message = event?.detail?.message || "Authentication failed. Please try again.";
+        setStatus(message, "error");
+    });
 
     document.addEventListener("keydown", (event) => {
         if (isConfirmModalOpen()) return;
