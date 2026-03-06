@@ -91,10 +91,22 @@
             </div>
             <div class="quiz-header-actions">
                 <label class="scope-select-wrap" for="quiz-collection-select">
-                    <span>Quick Scope</span>
-                    <select id="quiz-collection-select">
-                        <option value="all">All Collections</option>
-                    </select>
+                    <span class="scope-select-copy">
+                        <span class="scope-select-kicker">Quick Scope</span>
+                        <span class="scope-select-hint">Jump between collections without leaving quiz mode.</span>
+                    </span>
+                    <span class="scope-select-shell">
+                        <span class="scope-select-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M4.5 7.5h15" />
+                                <path d="M7 12h10" />
+                                <path d="M9.5 16.5h5" />
+                            </svg>
+                        </span>
+                        <select id="quiz-collection-select">
+                            <option value="all">All Collections</option>
+                        </select>
+                    </span>
                 </label>
                 <button id="refresh-cards-btn" type="button">Reset Selected Stats</button>
             </div>

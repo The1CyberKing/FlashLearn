@@ -8,6 +8,10 @@ const { CONFIG, getHeaders, hasValidToken } = core;
 const API_URL = CONFIG.API_URL;
 const DEFAULT_COLLECTION_COLOR = CONFIG.DEFAULT_COLLECTION_COLOR;
 const BACKGROUND_MODE_STORAGE_KEY = "flashlearn.background.mode";
+const CARD_LENGTH_LIMITS = Object.freeze({
+    question: 480,
+    answer: 960,
+});
 
 let flashcards = [];
 let allFlashcards = [];
@@ -24,6 +28,8 @@ const cardAnswer = document.getElementById("card-answer");
 const cardInner = document.getElementById("card-inner");
 const cardIndexDisplay = document.getElementById("card-index");
 const flashcardElement = document.getElementById("flashcard");
+const cardFrontFace = document.querySelector(".card-front");
+const cardBackFace = document.querySelector(".card-back");
 const collectionSelect = document.getElementById("collection-select");
 const collectionTree = document.getElementById("collection-tree");
 const activeCollectionText = document.getElementById("active-collection");
@@ -191,6 +197,79 @@ function truncateCardQuestion(question) {
     const normalized = String(question || "Untitled card").replace(/\s+/g, " ").trim();
     if (normalized.length <= 50) return normalized;
     return `${normalized.slice(0, 47)}...`;
+}
+
+function validateCardContent(question, answer) {
+    const normalizedQuestion = String(question || "").trim();
+    const normalizedAnswer = String(answer || "").trim();
+
+    if (!normalizedQuestion || !normalizedAnswer) {
+        return { error: "Please fill in both the Question and the Answer fields." };
+    }
+    if (normalizedQuestion.length > CARD_LENGTH_LIMITS.question) {
+        return { error: `Question must be ${CARD_LENGTH_LIMITS.question} characters or fewer.` };
+    }
+    if (normalizedAnswer.length > CARD_LENGTH_LIMITS.answer) {
+        return { error: `Answer must be ${CARD_LENGTH_LIMITS.answer} characters or fewer.` };
+    }
+
+    return {
+        question: normalizedQuestion,
+        answer: normalizedAnswer,
+        error: "",
+    };
+}
+
+function getTextDensityScore(text) {
+    const normalized = String(text || "").trim();
+    const lineBreaks = (normalized.match(/\n/g) || []).length;
+    return normalized.length + (lineBreaks * 28);
+}
+
+function fitTextToFace(textElement, faceElement, options) {
+    if (!textElement || !faceElement || !options) return;
+
+    const maxPx = options.maxPx || 26;
+    const minPx = options.minPx || 12;
+    const stepPx = options.stepPx || 1;
+    const lineHeight = options.lineHeight || "1.4";
+
+    textElement.style.fontSize = `${maxPx}px`;
+    textElement.style.lineHeight = lineHeight;
+    void faceElement.offsetHeight;
+
+    let currentPx = maxPx;
+    while (
+        currentPx > minPx &&
+        (faceElement.scrollHeight > faceElement.clientHeight || faceElement.scrollWidth > faceElement.clientWidth)
+    ) {
+        currentPx -= stepPx;
+        textElement.style.fontSize = `${currentPx}px`;
+        void faceElement.offsetHeight;
+    }
+}
+
+function renderFlashcardCopy(questionText, answerText) {
+    if (cardQuestion) cardQuestion.textContent = questionText;
+    if (cardAnswer) cardAnswer.textContent = answerText;
+
+    if (cardFrontFace) {
+        cardFrontFace.classList.toggle("is-dense", getTextDensityScore(questionText) > 240);
+    }
+    if (cardBackFace) {
+        cardBackFace.classList.toggle("is-dense", getTextDensityScore(answerText) > 480);
+    }
+
+    fitTextToFace(cardQuestion, cardFrontFace, {
+        maxPx: 26,
+        minPx: 11,
+        lineHeight: "1.4",
+    });
+    fitTextToFace(cardAnswer, cardBackFace, {
+        maxPx: 26,
+        minPx: 8,
+        lineHeight: "1.3",
+    });
 }
 
 function applyActiveCollectionFilter({ preferredCardId = null, resetIndex = false } = {}) {
@@ -554,6 +633,9 @@ async function initializeApp() {
     setupNoticeModal();
     setupImportExportControls();
     setupKeyboardShortcuts();
+    window.addEventListener("resize", () => {
+        renderFlashcardCopy(cardQuestion?.textContent || "", cardAnswer?.textContent || "");
+    });
     renderCollectionOptions();
     await fetchCollections();
     await fetchFlashcards();
@@ -787,12 +869,25 @@ function parseImportedCollectionPayload(rawText) {
         throw new Error("Cards are missing or malformed in the import file.");
     }
 
-    const cards = sourceCards
-        .map((card) => ({
-            question: String(card?.question || "").trim(),
-            answer: String(card?.answer || "").trim(),
-        }))
-        .filter((card) => card.question && card.answer);
+    const cards = [];
+    sourceCards.forEach((card, index) => {
+        const question = String(card?.question || "").trim();
+        const answer = String(card?.answer || "").trim();
+
+        if (!question && !answer) {
+            return;
+        }
+
+        const validation = validateCardContent(question, answer);
+        if (validation.error) {
+            throw new Error(`Card ${index + 1}: ${validation.error}`);
+        }
+
+        cards.push({
+            question: validation.question,
+            answer: validation.answer,
+        });
+    });
 
     if (sourceCards.length > 0 && cards.length === 0) {
         throw new Error("No valid cards were found in this file.");
@@ -1101,8 +1196,7 @@ function onCollectionChange() {
 
 async function fetchFlashcards() {
     if (!hasValidToken()) {
-        cardQuestion.textContent = "Please Login to see your cards.";
-        cardAnswer.textContent = "Click the Login button above.";
+        renderFlashcardCopy("Please Login to see your cards.", "Click the Login button above.");
         allFlashcards = [];
         flashcards = [];
         currentIndex = 0;
@@ -1119,8 +1213,7 @@ async function fetchFlashcards() {
         });
 
         if (response.status === 401) {
-            cardQuestion.textContent = "Session expired.";
-            cardAnswer.textContent = "Please logout and login again.";
+            renderFlashcardCopy("Session expired.", "Please logout and login again.");
             allFlashcards = [];
             flashcards = [];
             currentIndex = 0;
@@ -1142,8 +1235,7 @@ async function fetchFlashcards() {
         allFlashcards = [];
         flashcards = [];
         currentIndex = 0;
-        cardQuestion.textContent = "Error loading cards.";
-        cardAnswer.textContent = "Check console for details.";
+        renderFlashcardCopy("Error loading cards.", "Check console for details.");
         cardIndexDisplay.textContent = "0 / 0";
         updateActiveCollectionLabel();
         renderCollectionTree();
@@ -1184,15 +1276,13 @@ async function handleAddCardFormSubmit(event) {
     event.preventDefault();
     if (!addCardQuestionInput || !addCardAnswerInput) return;
 
-    const question = addCardQuestionInput.value.trim();
-    const answer = addCardAnswerInput.value.trim();
-
-    if (!question || !answer) {
-        setModalError(addCardError, "Please fill in both the Question and the Answer fields.");
+    const validation = validateCardContent(addCardQuestionInput.value, addCardAnswerInput.value);
+    if (validation.error) {
+        setModalError(addCardError, validation.error);
         return;
     }
 
-    const saved = await saveFlashcard(question, answer, addCardError);
+    const saved = await saveFlashcard(validation.question, validation.answer, addCardError);
     if (saved) {
         closeModalById("add-card-modal");
     }
@@ -1228,11 +1318,12 @@ async function saveFlashcard(question, answer, errorElement = null) {
             return false;
         }
 
+        const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-            throw new Error(`Server error: ${response.status}`);
+            throw new Error(payload.detail || `Server error: ${response.status}`);
         }
 
-        const createdCard = await response.json().catch(() => ({}));
+        const createdCard = payload;
         await fetchFlashcards();
         setTimeout(() => {
             const createdIndex = flashcards.findIndex((card) => String(card.id) === String(createdCard.id));
@@ -1244,9 +1335,9 @@ async function saveFlashcard(question, answer, errorElement = null) {
     } catch (error) {
         console.error("Error adding card:", error);
         if (errorElement) {
-            setModalError(errorElement, "Failed to save card. Please try again.");
+            setModalError(errorElement, error?.message || "Failed to save card. Please try again.");
         } else {
-            showNoticeModal("Save Failed", "Failed to save card. Please try again.");
+            showNoticeModal("Save Failed", error?.message || "Failed to save card. Please try again.");
         }
         return false;
     }
@@ -1338,11 +1429,9 @@ async function handleEditCardFormSubmit(event) {
     event.preventDefault();
     if (!editQuestionInput || !editAnswerInput || editingCardId === null) return;
 
-    const question = editQuestionInput.value.trim();
-    const answer = editAnswerInput.value.trim();
-
-    if (!question || !answer) {
-        setModalError(editCardError, "Please fill in both fields.");
+    const validation = validateCardContent(editQuestionInput.value, editAnswerInput.value);
+    if (validation.error) {
+        setModalError(editCardError, validation.error);
         return;
     }
 
@@ -1354,8 +1443,8 @@ async function handleEditCardFormSubmit(event) {
             method: "PUT",
             headers: getHeaders(),
             body: JSON.stringify({
-                question: question,
-                answer: answer,
+                question: validation.question,
+                answer: validation.answer,
                 collection_id: collectionId
             })
         });
@@ -1365,15 +1454,16 @@ async function handleEditCardFormSubmit(event) {
             return;
         }
 
+        const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-            throw new Error(`Server error: ${response.status}`);
+            throw new Error(payload.detail || `Server error: ${response.status}`);
         }
 
         closeModalById("edit-card-modal");
         await fetchFlashcards();
     } catch (error) {
         console.error("Edit failed:", error);
-        setModalError(editCardError, "Failed to update card. Please try again.");
+        setModalError(editCardError, error?.message || "Failed to update card. Please try again.");
     }
 }
 
@@ -1394,26 +1484,24 @@ flashcardElement?.addEventListener("animationend", () => {
 
 function updateCardDisplay() {
     if (!hasValidToken()) {
-        cardQuestion.textContent = "Please Login to see your cards.";
-        cardAnswer.textContent = "Click the Login button above.";
+        renderFlashcardCopy("Please Login to see your cards.", "Click the Login button above.");
         cardIndexDisplay.textContent = "0 / 0";
         renderCollectionTree();
         return;
     }
 
     if (flashcards.length === 0) {
-        cardQuestion.textContent = activeCollection === "all"
-            ? "No cards yet."
-            : "No cards in this collection yet.";
-        cardAnswer.textContent = "...";
+        renderFlashcardCopy(
+            activeCollection === "all" ? "No cards yet." : "No cards in this collection yet.",
+            "..."
+        );
         cardIndexDisplay.textContent = "0 / 0";
         renderCollectionTree();
         return;
     }
 
     cardInner.classList.remove("flipped");
-    cardQuestion.textContent = flashcards[currentIndex].question;
-    cardAnswer.textContent = flashcards[currentIndex].answer;
+    renderFlashcardCopy(flashcards[currentIndex].question, flashcards[currentIndex].answer);
     cardIndexDisplay.textContent = `${currentIndex + 1} / ${flashcards.length}`;
     renderCollectionTree();
 }

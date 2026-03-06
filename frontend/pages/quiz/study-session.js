@@ -29,6 +29,8 @@ const cardStage = document.getElementById("card-stage");
 
 const flashcard = document.getElementById("flashcard");
 const cardInner = document.getElementById("card-inner");
+const cardFrontFace = document.querySelector(".card-front");
+const cardBackFace = document.querySelector(".card-back");
 const cardSideLabel = document.getElementById("card-side-label");
 const cardPrimaryText = document.getElementById("card-primary-text");
 const cardSecondaryText = document.getElementById("card-secondary-text");
@@ -44,6 +46,58 @@ const completeWrap = document.getElementById("complete-wrap");
 const completeButton = document.getElementById("complete-btn");
 
 document.addEventListener("DOMContentLoaded", initializePage);
+
+function getTextDensityScore(text) {
+    const normalized = String(text || "").trim();
+    const lineBreaks = (normalized.match(/\n/g) || []).length;
+    return normalized.length + (lineBreaks * 28);
+}
+
+function fitTextToFace(textElement, faceElement, options) {
+    if (!textElement || !faceElement || !options) return;
+
+    const maxPx = options.maxPx || 44;
+    const minPx = options.minPx || 14;
+    const stepPx = options.stepPx || 1;
+    const lineHeight = options.lineHeight || "1.2";
+
+    textElement.style.fontSize = `${maxPx}px`;
+    textElement.style.lineHeight = lineHeight;
+    void faceElement.offsetHeight;
+
+    let currentPx = maxPx;
+    while (
+        currentPx > minPx &&
+        (faceElement.scrollHeight > faceElement.clientHeight || faceElement.scrollWidth > faceElement.clientWidth)
+    ) {
+        currentPx -= stepPx;
+        textElement.style.fontSize = `${currentPx}px`;
+        void faceElement.offsetHeight;
+    }
+}
+
+function renderSessionCardCopy(primaryText, secondaryText) {
+    if (cardPrimaryText) cardPrimaryText.textContent = primaryText;
+    if (cardSecondaryText) cardSecondaryText.textContent = secondaryText;
+
+    if (cardFrontFace) {
+        cardFrontFace.classList.toggle("is-dense", getTextDensityScore(primaryText) > 260);
+    }
+    if (cardBackFace) {
+        cardBackFace.classList.toggle("is-dense", getTextDensityScore(secondaryText) > 520);
+    }
+
+    fitTextToFace(cardPrimaryText, cardFrontFace, {
+        maxPx: 51,
+        minPx: 16,
+        lineHeight: "1.14",
+    });
+    fitTextToFace(cardSecondaryText, cardBackFace, {
+        maxPx: 32,
+        minPx: 10,
+        lineHeight: "1.18",
+    });
+}
 
 function setStatus(message = "", tone = "info") {
     if (!sessionStatus) return;
@@ -151,8 +205,7 @@ function renderCardRail() {
 function renderCard() {
     if (!cards.length) {
         if (cardSideLabel) cardSideLabel.textContent = "TERM";
-        if (cardPrimaryText) cardPrimaryText.textContent = "No cards in this collection yet.";
-        if (cardSecondaryText) cardSecondaryText.textContent = "Add cards from the Study page.";
+        renderSessionCardCopy("No cards in this collection yet.", "Add cards from the Study page.");
         if (againButton) againButton.disabled = true;
         if (easyButton) easyButton.disabled = true;
         if (prevButton) prevButton.disabled = true;
@@ -173,8 +226,7 @@ function renderCard() {
     const isUnknown = isReviewed && !isKnown;
 
     if (cardSideLabel) cardSideLabel.textContent = "TERM";
-    if (cardPrimaryText) cardPrimaryText.textContent = current.question || "Untitled";
-    if (cardSecondaryText) cardSecondaryText.textContent = current.answer || "-";
+    renderSessionCardCopy(current.question || "Untitled", current.answer || "-");
 
     if (againButton) againButton.disabled = !hasValidToken();
     if (easyButton) easyButton.disabled = !hasValidToken();
@@ -316,6 +368,10 @@ function setupEvents() {
         completeButton.addEventListener("click", completeSession);
     }
 
+    window.addEventListener("resize", () => {
+        renderSessionCardCopy(cardPrimaryText?.textContent || "", cardSecondaryText?.textContent || "");
+    });
+
     window.addEventListener("flashlearn:auth-error", (event) => {
         const message = event?.detail?.message || "Authentication failed. Please try again.";
         setStatus(message, "error");
@@ -365,10 +421,12 @@ async function fetchData() {
 
     if (!hasValidToken()) {
         if (sessionTitle) sessionTitle.textContent = "Sign in required";
-        if (cardPrimaryText) cardPrimaryText.textContent = "Please log in to start this study session.";
-        if (cardSecondaryText) cardSecondaryText.textContent = "Your cards will appear after sign-in.";
         if (loginButton) loginButton.classList.remove("is-hidden");
         renderCard();
+        renderSessionCardCopy(
+            "Please log in to start this study session.",
+            "Your cards will appear after sign-in."
+        );
         return;
     }
     if (loginButton) loginButton.classList.add("is-hidden");
@@ -417,10 +475,9 @@ async function initializePage() {
 
     if (!collectionId) {
         if (sessionTitle) sessionTitle.textContent = "Invalid collection";
-        if (cardPrimaryText) cardPrimaryText.textContent = "No collection was selected.";
-        if (cardSecondaryText) cardSecondaryText.textContent = "Return and choose a collection to start.";
         setStatus("Open this page from a collection.", "error");
         renderCard();
+        renderSessionCardCopy("No collection was selected.", "Return and choose a collection to start.");
         return;
     }
 

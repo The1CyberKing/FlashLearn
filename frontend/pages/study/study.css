@@ -682,11 +682,19 @@ body.dynamic-bg::after {
     transform: rotateY(180deg);
 }
 
+.card-front.is-dense,
+.card-back.is-dense {
+    padding: 20px;
+}
+
 .card-front h2,
 .card-back h2 {
     margin: 0;
-    font-size: clamp(1.15rem, 2.4vw, 1.65rem);
-    line-height: 1.45;
+    font-size: 26px;
+    line-height: 1.4;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 button {

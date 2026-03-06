@@ -27,6 +27,8 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 DEFAULT_COLLECTION_COLOR = "#0F4C5C"
 HEX_COLOR_PATTERN = re.compile(r"^#[0-9A-Fa-f]{6}$")
+CARD_QUESTION_MAX_LENGTH = 480
+CARD_ANSWER_MAX_LENGTH = 960
 
 
 class CollectionDB(Base):
@@ -251,6 +253,15 @@ def get_owned_collection(collection_id: int, user_id: str, db: Session) -> Colle
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found or access denied")
     return collection
+
+
+def normalize_card_text(value: str, field_name: str, max_length: int) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Question and answer are required")
+    if len(normalized) > max_length:
+        raise HTTPException(status_code=400, detail=f"{field_name} must be {max_length} characters or fewer")
+    return normalized
 
 
 def get_owned_card(card_id: int, user_id: str, db: Session) -> CardDB:
@@ -510,11 +521,8 @@ def create_card(
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    question = card.question.strip()
-    answer = card.answer.strip()
-
-    if not question or not answer:
-        raise HTTPException(status_code=400, detail="Question and answer are required")
+    question = normalize_card_text(card.question, "Question", CARD_QUESTION_MAX_LENGTH)
+    answer = normalize_card_text(card.answer, "Answer", CARD_ANSWER_MAX_LENGTH)
 
     if card.collection_id is not None:
         get_owned_collection(card.collection_id, user_id, db)
@@ -557,10 +565,8 @@ def update_card(
 ):
     db_card = get_owned_card(card_id, user_id, db)
 
-    question = card_data.question.strip()
-    answer = card_data.answer.strip()
-    if not question or not answer:
-        raise HTTPException(status_code=400, detail="Question and answer are required")
+    question = normalize_card_text(card_data.question, "Question", CARD_QUESTION_MAX_LENGTH)
+    answer = normalize_card_text(card_data.answer, "Answer", CARD_ANSWER_MAX_LENGTH)
 
     if card_data.collection_id is not None:
         get_owned_collection(card_data.collection_id, user_id, db)

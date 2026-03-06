@@ -176,10 +176,10 @@
 
             <form id="add-card-form" class="modal-form">
                 <label for="modal-question">Question</label>
-                <textarea id="modal-question" name="question" rows="4" placeholder="Type your question..." required></textarea>
+                <textarea id="modal-question" name="question" rows="4" maxlength="480" placeholder="Type your question..." required></textarea>
 
                 <label for="modal-answer">Answer</label>
-                <textarea id="modal-answer" name="answer" rows="4" placeholder="Type your answer..." required></textarea>
+                <textarea id="modal-answer" name="answer" rows="4" maxlength="960" placeholder="Type your answer..." required></textarea>
                 <p id="add-card-error" class="modal-error" aria-live="polite"></p>
 
                 <div class="modal-actions">
@@ -226,10 +226,10 @@
 
             <form id="edit-card-form" class="modal-form">
                 <label for="edit-question">Question</label>
-                <textarea id="edit-question" name="question" rows="4" required></textarea>
+                <textarea id="edit-question" name="question" rows="4" maxlength="480" required></textarea>
 
                 <label for="edit-answer">Answer</label>
-                <textarea id="edit-answer" name="answer" rows="4" required></textarea>
+                <textarea id="edit-answer" name="answer" rows="4" maxlength="960" required></textarea>
                 <p id="edit-card-error" class="modal-error" aria-live="polite"></p>
 
                 <div class="modal-actions">
